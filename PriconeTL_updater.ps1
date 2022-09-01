@@ -31,13 +31,12 @@ function Get-LocalVersion {
     [parameter()][System.String]$VersionFile
     )
 	
-	try{
-		$LocalName = Get-Content -Raw -Path "$VersionFile" -Erroraction 'SilentlyContinue'
-		$LocalVersion = $LocalName.SubString($LocalName.Length-11)
-	}
-	catch{
+	$LocalVersion = Get-Content -Raw -Path "$VersionFile" -Erroraction 'SilentlyContinue'
+	
+	if(!($LocalVersion)){
 		$LocalVersion = "None"
 	}
+	
 	return $LocalVersion
 }
 
@@ -63,7 +62,7 @@ function Get-LatestRelease {
         break
     }
 
-    return $Version.SubString($Version.Length-11), $AssetsLink
+    return $Version.SubString($Version.Length-10), $AssetsLink
 }
 
 function Remove-OldMod {
@@ -102,7 +101,7 @@ function Get-TLMod {
 
 if(Test-Path -Path $CfgFileLocation){
 	$PriconnePath = Get-GamePath -CfgFile $CfgFileLocation
-	$VersionFile = $PriconnePath + "\version.txt"
+	$VersionFile = $PriconnePath + "\Version.txt"
 	$LocalVer = Get-LocalVersion -VersionFile $VersionFile
 } else {
 	Write-Error "Cannot find DMM Game config file`nDid you install DMM Game?"
