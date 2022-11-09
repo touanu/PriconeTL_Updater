@@ -1,11 +1,6 @@
 $CfgFileLocation = $Env:APPDATA + "\dmmgameplayer5\dmmgame.cnf"
 $LatestRelease = "https://api.github.com/repos/ImaterialC/PriconeTL/releases/latest"
 
-#From https://stackoverflow.com/a/31602095
-#Hope this fix some permission error while deleting files
-Write-Host "Requesting permission..."
-if (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) { Start-Process powershell.exe "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs; exit }
-
 Clear-Host
 
 function Get-GamePath {
@@ -74,16 +69,21 @@ function Remove-OldMod {
 	Param(
 		[parameter()][System.String]$GamePath
 	)
-	try{
-		$p = Get-Process "PrincessConnectReDive" -Erroraction 'SilentlyContinue'
+	$p = Get-Process "PrincessConnectReDive" -Erroraction 'SilentlyContinue'
 
-		if ($p) {
-			Write-Host "`nPriconne is still running and will be killed to remove old files!`n"
-			Timeout /NoBreak 5
-			Stop-Process $p
-		}
-		Remove-Item -Path $GamePath\BepInEx -Recurse -Erroraction 'SilentlyContinue'
-		Remove-Item -Path $GamePath\PriconeTL_updater.bat -Erroraction 'SilentlyContinue' #Redundancy 
+	if ($p) {
+		Write-Host "`nPriconne is still running and will be killed to remove old files!`n"
+		Timeout /NoBreak 5
+		Stop-Process $p
+	}
+	try{
+		Remove-Item -Path $($GamePath)\BepInEx -Recurse -Erroraction 'Stop'
+		Remove-Item -Path $($GamePath)\PriconeTL_Updater.bat -Erroraction 'Stop'
+	}
+	catch [System.UnauthorizedAccessException] {
+		Write-Host "Requesting admin permissions to delete files..."
+		$command = "Remove-Item -Path $($GamePath)\BepInEx -Recurse -Erroraction 'SilentlyContinue'; Remove-Item -Path $($GamePath)\PriconeTL_Updater.bat -Erroraction 'SilentlyContinue'"
+		Start-Process powershell -Verb runAs -WorkingDirectory $GamePath -WindowStyle hidden -ArgumentList "-Command $($command)"
 	}
 	catch{
 		Write-Verbose $_.Exception
