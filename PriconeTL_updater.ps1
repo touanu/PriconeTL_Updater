@@ -75,6 +75,13 @@ function Remove-OldMod {
 		[parameter()][System.String]$GamePath
 	)
 	try{
+		$p = Get-Process "PrincessConnectReDive" -Erroraction 'SilentlyContinue'
+
+		if ($p) {
+			Write-Host "`nPriconne is still running and will be killed to remove old files!`n"
+			Timeout /NoBreak 5
+			Stop-Process $p
+		}
 		Remove-Item -Path $GamePath\BepInEx -Recurse -Erroraction 'SilentlyContinue'
 		Remove-Item -Path $GamePath\PriconeTL_updater.bat -Erroraction 'SilentlyContinue' #Redundancy 
 	}
