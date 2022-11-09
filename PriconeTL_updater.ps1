@@ -1,6 +1,11 @@
 $CfgFileLocation = $Env:APPDATA + "\dmmgameplayer5\dmmgame.cnf"
 $LatestRelease = "https://api.github.com/repos/ImaterialC/PriconeTL/releases/latest"
 
+#From https://stackoverflow.com/a/31602095
+#Hope this fix some permission error while deleting files
+Write-Host "Requesting permission..."
+if (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) { Start-Process powershell.exe "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs; exit }
+
 Clear-Host
 
 function Get-GamePath {
@@ -13,7 +18,7 @@ function Get-GamePath {
 		$PriconnePath = $DetailContent.detail.path
 	}
 	catch{
-		Write-Host $_.Exception
+		Write-Verbose $_.Exception
 		Write-Error "Cannot get game path!"
 		break
 	}
@@ -52,7 +57,7 @@ function Get-LatestRelease {
 		$AssetsLink = $Json | select -ExpandProperty assets | select -expand browser_download_url
     }
     catch{
-        Write-Host $_.Exception
+        Write-Verbose $_.Exception
         Write-Error "Cannot get latest release info!"
         break
     }
@@ -70,11 +75,12 @@ function Remove-OldMod {
 		[parameter()][System.String]$GamePath
 	)
 	try{
-		Remove-Item -Path $GamePath\BepInEx -Recurse
+		Remove-Item -Path $GamePath\BepInEx -Recurse -Erroraction 'SilentlyContinue'
+		Remove-Item -Path $GamePath\PriconeTL_updater.bat -Erroraction 'SilentlyContinue' #Redundancy 
 	}
 	catch{
-		Write-Host $_.Exception
-		Write-Error "Unable to remove old BepInEx folder"
+		Write-Verbose $_.Exception
+		Write-Error "Error(s) occurred while removing old BepInEx folder"
 	}
 }
 
@@ -93,7 +99,7 @@ function Get-TLMod {
 		Remove-Item -Path $ZipPath
 	}
 	catch{
-        Write-Host $_.Exception
+        Write-Verbose $_.Exception
         Write-Error "An error was occurred while trying to install!"
         break
 	}
