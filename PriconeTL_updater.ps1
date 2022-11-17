@@ -48,8 +48,8 @@ function Get-LatestRelease {
     try{
         $Response = Invoke-WebRequest -Method "GET" -URI $URI -UseBasicParsing
 		$Json = $Response.Content | ConvertFrom-Json
-		$Version = $Json | select -expand name
-		$AssetsLink = $Json | select -ExpandProperty assets | select -expand browser_download_url
+		$Version = $Json | Select-Object -expand name
+		$AssetsLink = $Json | Select-Object -ExpandProperty assets | Select-Object -expand browser_download_url
     }
     catch{
         Write-Verbose $_.Exception
@@ -77,8 +77,8 @@ function Remove-OldMod {
 		Stop-Process $p
 	}
 	try{
-		Remove-Item -Path $($GamePath)\BepInEx -Recurse -Erroraction 'Stop'
-		Remove-Item -Path $($GamePath)\PriconeTL_Updater.bat -Erroraction 'Stop'
+		Remove-Item -Path "$($GamePath)\BepInEx" -Recurse -Erroraction 'Stop'
+		Remove-Item -Path "$($GamePath)\PriconeTL_Updater.bat" -Erroraction 'SilentlyContinue'
 	}
 	catch [System.UnauthorizedAccessException] {
 		Write-Host "Requesting admin permissions to delete files..."
@@ -88,6 +88,7 @@ function Remove-OldMod {
 	catch{
 		Write-Verbose $_.Exception
 		Write-Error "Error(s) occurred while removing old BepInEx folder"
+		break
 	}
 }
 
