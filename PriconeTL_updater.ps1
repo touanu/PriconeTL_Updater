@@ -18,7 +18,7 @@ function Get-GamePath {
 		break
 	}
 	if($PriconnePath){
-		Write-Host "Found priconner in"$PriconnePath
+		Write-Host "Found priconner in $PriconnePath"
 	} else{
 		Write-Error "Cannot find the game path! Did you install Priconne from DMM Game?"
 		break
@@ -31,7 +31,7 @@ function Get-LocalVersion {
     [parameter()][System.String]$VersionFile
     )
 	
-	$LocalVersion = Get-Content -Raw -Path "$VersionFile" -Erroraction 'SilentlyContinue'
+	$LocalVersion = Get-Content -Raw -Path $VersionFile -Erroraction 'SilentlyContinue'
 	
 	if(!($LocalVersion)){
 		$LocalVersion = "None"
@@ -77,13 +77,16 @@ function Remove-OldMod {
 		Stop-Process $p
 	}
 	try{
-		Remove-Item -Path "$($GamePath)\BepInEx" -Recurse -Erroraction 'Stop'
-		Remove-Item -Path "$($GamePath)\PriconeTL_Updater.bat" -Erroraction 'SilentlyContinue'
+		#Catch PermissionDenied error
+		if (Test-Path -Path "$PriconnePath\BepInEx" -PathType Container -ErrorAction SilentlyContinue) {
+			Remove-Item -Path "$GamePath\BepInEx" -Recurse -Erroraction 'Stop'
+		}
+		Remove-Item -Path "$GamePath\PriconeTL_Updater.bat" -Erroraction 'SilentlyContinue'
 	}
 	catch [System.UnauthorizedAccessException] {
 		Write-Host "Requesting admin permissions to delete files..."
-		$command = "Remove-Item -Path $($GamePath)\BepInEx -Recurse -Erroraction 'SilentlyContinue'; Remove-Item -Path $($GamePath)\PriconeTL_Updater.bat -Erroraction 'SilentlyContinue'"
-		Start-Process powershell -Verb runAs -WorkingDirectory $GamePath -WindowStyle hidden -ArgumentList "-Command $($command)"
+		$command = "Remove-Item -Path $GamePath\BepInEx -Recurse -Erroraction 'SilentlyContinue'; Remove-Item -Path $GamePath\PriconeTL_Updater.bat -Erroraction 'SilentlyContinue'"
+		Start-Process powershell -Verb runAs -WorkingDirectory $GamePath -WindowStyle hidden -ArgumentList "-Command $command"
 	}
 	catch{
 		Write-Verbose $_.Exception
@@ -100,7 +103,7 @@ function Get-TLMod {
 	)
 	try{
 		Write-Host "Downloading compressed mod files..."
-		Write-Host "Assets File:"$LinkZip"`n"
+		Write-Host "Assets File: $LinkZip`n"
 		Invoke-WebRequest $LinkZip -OutFile $ZipPath
 		Write-Host "Extracting mod files to game folder..."
 		Expand-Archive -Path $ZipPath -DestinationPath $ExtractPath -Force
@@ -123,20 +126,34 @@ if(Test-Path -Path $CfgFileLocation){
 }
 
 Write-Host "`nChecking for update..."
-Write-Host "Current Version:"$LocalVer
+Write-Host "Current Version: $LocalVer"
 $LatestVer = Get-LatestRelease -URI $LatestRelease
-Write-Host "Latest Version:"$LatestVer[0]
+Write-Host "Latest Version: $($LatestVer[0])"
 
 if($LatestVer[0] -eq $LocalVer){
 	Write-Host "`nYour PriconeTL version is latest!"
-	break
-} elseif((Test-Path -Path $PriconnePath\BepInEx\Translation) -or ($LocalVer -ne "None")) {
+} elseif($LocalVer -ne "None") {
 	Write-Host "`nUpdating TL Mod..."
 	Remove-OldMod -GamePath $PriconnePath
+	Get-TLMod -LinkZip $LatestVer[1] -ZipPath "$Env:TEMP\Pricone.UI.EN.DMM.zip" -ExtractPath $PriconnePath
+	Write-Host "`nDone!"
 } else{
 	Write-Host "`nDownloading and installing TL Mod..."
+	Get-TLMod -LinkZip $LatestVer[1] -ZipPath "$Env:TEMP\Pricone.UI.EN.DMM.zip" -ExtractPath $PriconnePath
+	Write-Host "`nDone!"
 }
 
-Get-TLMod -LinkZip $LatestVer[1] -ZipPath "$Env:TEMP\Pricone.UI.EN.DMM.zip" -ExtractPath $PriconnePath
+$DMMFastLauncher = @(
+	"$Env:APPDATA\DMMGamePlayerFastLauncher",
+	"$PriconnePath"
+)
 
-Write-Host "Done!`n"
+foreach ($path in $DMMFastLauncher) {
+	Write-Verbose "Checking $path\DMMGamePlayerFastLauncher.exe"
+	if (Test-Path -Path "$path\DMMGamePlayerFastLauncher.exe" -PathType Leaf -ErrorAction SilentlyContinue) {
+		Write-Host "Starting PriconneR game..."
+		Start-Process -FilePath "$path\DMMGamePlayerFastLauncher.exe" -WorkingDirectory "$path" -ArgumentList "priconner --game-path $PriconnePath"
+		break
+	}
+	Write-Verbose "Not Exist!"
+}

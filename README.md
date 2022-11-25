@@ -5,11 +5,7 @@ A script to automate [PriconeTL](https://github.com/ImaterialC/PriconeTL) instal
 
 ## How to use
 Simply open Powershell and type the following command:
-
 `iwr -useb https://bit.ly/3RjFnwE|iex`
 
-## Features
-<details>
-  <summary>Click to expand</summary>
-  Now, this is just a simple script to install and update automatically, but (maybe) i will update some features for fixing common errors,
-  or even a GUI ¯\_(ツ)_/¯
+## Open game without DMM Game Launcher
+Install [fa0311/DMMGamePlayerFastLauncher](https://github.com/fa0311/DMMGamePlayerFastLauncher) or put  DMMGamePlayerFastLauncher.exe file in game folder. Script will detect exe file and run game via this FastLauncher
