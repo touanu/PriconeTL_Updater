@@ -152,7 +152,7 @@ foreach ($path in $DMMFastLauncher) {
 	Write-Verbose "Checking $path\DMMGamePlayerFastLauncher.exe"
 	if (Test-Path -Path "$path\DMMGamePlayerFastLauncher.exe" -PathType Leaf -ErrorAction SilentlyContinue) {
 		Write-Host "Starting PriconneR game..."
-		Start-Process -FilePath "$path\DMMGamePlayerFastLauncher.exe" -WorkingDirectory "$path" -ArgumentList "priconner --game-path $PriconnePath"
+		Start-Process -FilePath "$path\DMMGamePlayerFastLauncher.exe" -WorkingDirectory "$path" -ArgumentList "priconner"
 		break
 	}
 	Write-Verbose "Not Exist!"

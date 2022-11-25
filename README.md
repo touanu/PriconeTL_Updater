@@ -5,6 +5,7 @@ A script to automate [PriconeTL](https://github.com/ImaterialC/PriconeTL) instal
 
 ## How to use
 Simply open Powershell and type the following command:
+
 `iwr -useb https://bit.ly/3RjFnwE|iex`
 
 ## Open game without DMM Game Launcher
