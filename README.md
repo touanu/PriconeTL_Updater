@@ -8,5 +8,7 @@ Simply open Powershell and type the following command:
 
 `iwr -useb https://bit.ly/3RjFnwE|iex`
 
+If PermissionDenied error is occured, run your powershell as administrator
+
 ## Open game without DMM Game Launcher
 Install [fa0311/DMMGamePlayerFastLauncher](https://github.com/fa0311/DMMGamePlayerFastLauncher) or put  DMMGamePlayerFastLauncher.exe file in game folder. Script will detect exe file and run game via this FastLauncher
