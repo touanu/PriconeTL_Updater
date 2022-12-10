@@ -1,5 +1,5 @@
 $CfgFileLocation = $Env:APPDATA + "\dmmgameplayer5\dmmgame.cnf"
-$Global:GithubAPI = "https://api.github.com/repos/ImaterialC/PriconeTL/releases/latest"
+$Global:GithubAPI = "https://api.github.com/repos/ImaterialC/PriconeTL"
 
 Clear-Host
 
@@ -28,10 +28,15 @@ function Get-GamePath {
 
 function Get-LocalVersion {
 	Param (
-		[System.String]$VersionFile
+		[System.String]$Path
 	)
 	try {
-		$LocalVersion = (Get-Content -Raw -Path $VersionFile -ErrorAction Stop).Replace(".","")
+		if ($Config.TLVersion) {
+			$LocalVersion = $Config.TLVersion
+		}
+		else {
+			$LocalVersion = Get-Date -Date (Get-Item "$Path\BepInEx" -ErrorAction Stop).LastWriteTime -Format "yyyyMMdd"
+		}
 	}
 	catch [System.Management.Automation.ItemNotFoundException] {
 		$LocalVersion = "None"
@@ -47,7 +52,7 @@ function Get-LocalVersion {
 
 function Get-LatestRelease {
 	try {
-		$Response = Invoke-WebRequest $GithubAPI
+		$Response = Invoke-WebRequest "$GithubAPI/releases/latest"
 		$Json = $Response.Content | ConvertFrom-Json
 		$Version = $Json | Select-Object -ExpandProperty tag_name
 		$AssetsLink = $Json | Select-Object -ExpandProperty assets | Select-Object -ExpandProperty browser_download_url
@@ -75,10 +80,7 @@ function Remove-OldMod {
 		Stop-Process $p
 	}
 	try {
-		#Catch PermissionDenied error
-		if (Test-Path -Path "$PriconnePath\BepInEx" -PathType Container -ErrorAction SilentlyContinue) {
-			Remove-Item -Path "$PriconnePath\BepInEx" -Recurse -Erroraction 'Stop'
-		}
+		Remove-Item -Path "$PriconnePath\BepInEx" -Recurse -Erroraction 'Stop'
 		Remove-Item -Path "$PriconnePath\PriconeTL_Updater.bat" -Erroraction 'SilentlyContinue'
 	}
 	catch [System.UnauthorizedAccessException] {
@@ -113,51 +115,113 @@ function Get-TLMod {
 	}
 }
 
+function Update-ChangedFiles {
+	param(
+		[string]$LocalVer
+	)
+
+	Write-Verbose "Compare URI: $GithubAPI/compare/$LocalVer...main"
+	$ChangedFiles = Invoke-RestMethod -URI "$GithubAPI/compare/$LocalVer...main" | Select-Object -ExpandProperty files
+
+	foreach ($file in $ChangedFiles) {
+		if ($file.filename -match "Translation/.+") {
+			Write-Verbose "`n$($file.status): $($file.filename)"
+			switch ($file.status) {
+				{ $_ -eq "added" -or $_ -eq "modified" } {
+					#Escaping brackets from https://stackoverflow.com/questions/55869623/how-to-escape-square-brackets-in-file-paths-with-invoke-webrequests-outfile-pa/55869947#55869947
+					Invoke-RestMethod -URI $file.raw_url -OutFile "$PriconnePath/BepInEx/$([WildcardPattern]::Escape($file.filename))"
+					Write-Verbose "RawURL: $($file.raw_url)"
+				}
+				"removed" {
+					Remove-Item -LiteralPath "$PriconnePath/BepInEx/$($file.filename)"
+				}
+			}
+		}
+	}
+}
+
+function Import-UserConfig {
+	param (
+		[Parameter(Mandatory, Position = 1)]
+		[string]
+		$Path
+	)
+	$Config = @{
+		"DMMGamePlayerFastLauncherSupport" = $true;
+		"CustomDMMGPFLPath"                = "";
+		"CustomDMMGPFLArguments"           = "";
+		"ForceRedownloadWhenUpdate"        = $false;
+		"TLVersion"                        = ""; 
+	}
+
+	$UserConfig = Get-Content $Path -Erroraction SilentlyContinue | ConvertFrom-Json
+	$Names = ($UserConfig | ConvertTo-Json | ConvertFrom-Json).PSObject.Properties.Name
+
+	foreach ($name in $Names) {
+		Write-Verbose "Import Config: $name = $($UserConfig.$name)"
+		$Config.$name = $UserConfig.$name
+	}
+
+	Write-Verbose "Config: $Config"
+	return $Config
+}
 
 if (Test-Path -Path $CfgFileLocation) {
 	$Global:PriconnePath = Get-GamePath -CfgFile $CfgFileLocation
-	$VersionFile = $PriconnePath + "\Version.txt"
-	$LocalVer = Get-LocalVersion -VersionFile $VersionFile
 }
 else {
 	Write-Error "Cannot find DMM Game config file`nDid you install DMM Game?"
 	break
 }
 
+$Global:Config = Import-UserConfig -Path "$PriconnePath\TLUpdater\config.json"
+
 Write-Host "`nChecking for update..."
+$LocalVer = Get-LocalVersion -Path $PriconnePath
 Write-Host "Current Version: $LocalVer"
 $LatestVer = Get-LatestRelease
 Write-Host "Latest Version: $($LatestVer[0])"
 
-if ($LatestVer[0] -eq $LocalVer) {
+if ($LocalVer -ge $LatestVer[0]) {
 	Write-Host "`nYour PriconeTL version is latest!"
 }
 elseif ($LocalVer -ne "None") {
 	Write-Host "`nUpdating TL Mod..."
-	Remove-OldMod
-	Get-TLMod -LinkZip $LatestVer[1] -ZipPath "$Env:TEMP\Pricone.UI.EN.DMM.zip"
+	if (!$Config.ForceRedownloadWhenUpdate) {
+		Write-Verbose "Comparing your version with latest version..."
+		Update-ChangedFiles $LocalVer
+	}
+	else {
+		Write-Verbose "Redownloading TL Mod..."
+		Remove-OldMod
+		Get-TLMod -LinkZip $LatestVer[1] -ZipPath "$Env:TEMP\PriconeUIENDMM.zip"
+	}
 	Write-Host "`nDone!"
 }
 else {
 	Write-Host "`nDownloading and installing TL Mod..."
-	Get-TLMod -LinkZip $LatestVer[1] -ZipPath "$Env:TEMP\Pricone.UI.EN.DMM.zip"
+	Get-TLMod -LinkZip $LatestVer[1] -ZipPath "$Env:TEMP\PriconeUIENDMM.zip"
 	Write-Host "`nDone!"
 }
 
-#Self-update Version.txt
-$LatestVer[0] | Out-File "$PriconnePath\Version.txt" -NoNewline
+$Config.TLVersion = $LatestVer[0]
+New-Item -Path "$PriconnePath\TLUpdater" -ItemType "directory" -ErrorAction SilentlyContinue
+$Config | ConvertTo-Json | Out-File "$PriconnePath\TLUpdater\config.json" -Force
 
-$DMMFastLauncher = @(
-	"$Env:APPDATA\DMMGamePlayerFastLauncher",
-	"$PriconnePath"
-)
+if ($Config.DMMGamePlayerFastLauncherSupport) {
+	$DMMFastLauncher = @(
+		"$Env:APPDATA\DMMGamePlayerFastLauncher",
+		"$PriconnePath",
+		$Config.CustomDMMGPFLPath
+	)
 
-foreach ($path in $DMMFastLauncher) {
-	Write-Verbose "Checking $path\DMMGamePlayerFastLauncher.exe"
-	if (Test-Path -Path "$path\DMMGamePlayerFastLauncher.exe" -PathType Leaf -ErrorAction SilentlyContinue) {
-		Write-Host "Starting PriconneR game..."
-		Start-Process -FilePath "$path\DMMGamePlayerFastLauncher.exe" -WorkingDirectory "$path" -ArgumentList "priconner"
-		break
+	foreach ($path in $DMMFastLauncher) {
+		Write-Verbose "Checking $path\DMMGamePlayerFastLauncher.exe"
+		if (Test-Path -Path "$path\DMMGamePlayerFastLauncher.exe" -PathType Leaf -ErrorAction SilentlyContinue) {
+			Write-Host "Starting PriconneR game..."
+			Start-Process -FilePath "$path\DMMGamePlayerFastLauncher.exe" -WorkingDirectory "$path" -ArgumentList "priconner $($Config.CustomArguments)"
+			break
+		}
+		Write-Verbose "Not Exist!"
 	}
-	Write-Verbose "Not Exist!"
 }
