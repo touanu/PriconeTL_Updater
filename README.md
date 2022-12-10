@@ -17,7 +17,7 @@ Install [fa0311/DMMGamePlayerFastLauncher](https://github.com/fa0311/DMMGamePlay
 
 ## Configuration
 
-Config file is located in `(Your priconner folder)\TLUpdater\config.json`
+Config file is auto-generated and located in `(Your priconner folder)\TLUpdater\config.json`
 
 Default config.json:
 
@@ -30,3 +30,5 @@ Default config.json:
     "CustomDMMGPFLArguments":  ""
 }
 ```
+
+Don't change `TLVersion`, it is also auto-generated
