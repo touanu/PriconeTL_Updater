@@ -182,10 +182,10 @@ Write-Host "Current Version: $LocalVer"
 $LatestVer = Get-LatestRelease
 Write-Host "Latest Version: $($LatestVer[0])"
 
-if ($LocalVer -ge $LatestVer[0]) {
+if ($LocalVer -ge $LatestVer[0] -and $LocalVer -ne "None") {
 	Write-Host "`nYour PriconeTL version is latest!"
 }
-elseif ($LocalVer -ne "None") {
+elseif ($LocalVer -le $LatestVer[0]) {
 	Write-Host "`nUpdating TL Mod..."
 	if (!$Config.ForceRedownloadWhenUpdate) {
 		Write-Verbose "Comparing your version with latest version..."
@@ -205,7 +205,7 @@ else {
 }
 
 $Config.TLVersion = $LatestVer[0]
-New-Item -Path "$PriconnePath\TLUpdater" -ItemType "directory" -ErrorAction SilentlyContinue
+New-Item -Path "$PriconnePath\TLUpdater" -ItemType "directory" -ErrorAction SilentlyContinue | Out-Null
 $Config | ConvertTo-Json | Out-File "$PriconnePath\TLUpdater\config.json" -Force
 
 if ($Config.DMMGamePlayerFastLauncherSupport) {
