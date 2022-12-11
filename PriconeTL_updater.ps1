@@ -1,4 +1,4 @@
-$CfgFileLocation = $Env:APPDATA + "\dmmgameplayer5\dmmgame.cnf"
+$CfgFileLocation = "$Env:APPDATA\dmmgameplayer5\dmmgame.cnf"
 $Global:GithubAPI = "https://api.github.com/repos/ImaterialC/PriconeTL"
 
 Clear-Host
@@ -35,7 +35,7 @@ function Get-LocalVersion {
 			$LocalVersion = $Config.TLVersion
 		}
 		else {
-			$LocalVersion = Get-Date -Date (Get-Item "$Path\BepInEx" -ErrorAction Stop).LastWriteTime -Format "yyyyMMdd"
+			$LocalVersion = Get-Date -Date (Get-Item "$Path\BepInEx\Translation" -ErrorAction Stop).LastWriteTime -Format "yyyyMMdd"
 		}
 	}
 	catch [System.Management.Automation.ItemNotFoundException] {
@@ -218,8 +218,13 @@ if ($Config.DMMGamePlayerFastLauncherSupport) {
 	foreach ($path in $DMMFastLauncher) {
 		Write-Verbose "Checking $path\DMMGamePlayerFastLauncher.exe"
 		if (Test-Path -Path "$path\DMMGamePlayerFastLauncher.exe" -PathType Leaf -ErrorAction SilentlyContinue) {
+			Write-Verbose "Found!"
+			if ($Config.CustomDMMGPFLArguments) {
+				$EscapedArguments = $Config.CustomDMMGPFLArguments.Replace("\u0027","`'")
+				Write-Verbose "Custom Arguments: $($Config.CustomDMMGPFLArguments)"
+			}
 			Write-Host "Starting PriconneR game..."
-			Start-Process -FilePath "$path\DMMGamePlayerFastLauncher.exe" -WorkingDirectory "$path" -ArgumentList "priconner $($Config.CustomArguments)"
+			Start-Process -FilePath "$path\DMMGamePlayerFastLauncher.exe" -WorkingDirectory "$path" -ArgumentList "priconner $EscapedArguments"
 			break
 		}
 		Write-Verbose "Not Exist!"
