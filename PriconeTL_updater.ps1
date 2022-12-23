@@ -1,5 +1,10 @@
-$CfgFileLocation = "$Env:APPDATA\dmmgameplayer5\dmmgame.cnf"
-$Global:GithubAPI = "https://api.github.com/repos/ImaterialC/PriconeTL"
+param (
+	[Parameter()]
+	[switch]$Uninstall = $false
+	,
+	[Parameter()]
+	[switch]$ForceRedownload = $false
+)
 
 Clear-Host
 
@@ -13,13 +18,12 @@ function Get-GamePath {
 		$PriconnePath = $DetailContent.detail.path
 	}
 	catch [System.Management.Automation.ItemNotFoundException] {
-		Write-Error "Cannot find the game path!`n Did you install Priconne from DMM Game?"
-		break
+		Write-Error "Cannot find the game path!`nDid you install Priconne from DMM Game?"
+		exit
 	}
 	catch {
-		Write-Verbose $_.Exception
-		Write-Error "Cannot get game path!"
-		break
+		Write-Error $_.Exception
+		exit
 	}
 
 	Write-Host "Found priconner in $PriconnePath"
@@ -37,16 +41,16 @@ function Get-LocalVersion {
 		else {
 			$LocalVersion = Get-Date -Date (Get-Item "$Path\BepInEx\Translation" -ErrorAction Stop).LastWriteTime -Format "yyyyMMdd"
 		}
+		Write-Host "Current Version: $LocalVersion"
 	}
 	catch [System.Management.Automation.ItemNotFoundException] {
 		$LocalVersion = "None"
 	}
 	catch {
-		Write-Verbose $_.Exception
-		Write-Error "Error(s) occurred while trying to get local version!"
-		break
+		Write-Error $_.Exception
+		exit
 	}
-	
+
 	return $LocalVersion
 }
 
@@ -58,40 +62,49 @@ function Get-LatestRelease {
 		$AssetsLink = $Json | Select-Object -ExpandProperty assets | Select-Object -ExpandProperty browser_download_url
 	}
 	catch {
-		Write-Verbose $_.Exception
-		Write-Error "Cannot get latest release info!"
-		break
+		Write-Error $_.Exception
+		exit
 	}
 
-	if ($Response.StatusCode -ne 200) {
-		Write-Error "Status Code wasn't 200"
-		break
-	}
-
+	Write-Host "Latest Version: $Version"
 	return $Version, $AssetsLink
 }
 
-function Remove-OldMod {
-	$p = Get-Process "PrincessConnectReDive" -Erroraction 'SilentlyContinue'
+function Remove-Mod {
+	$p = Get-Process "PrincessConnectReDive" -Erroraction SilentlyContinue
 
 	if ($p) {
 		Write-Host "`nPriconne is still running and will be killed to remove old files!`n"
 		Timeout /NoBreak 5
 		Stop-Process $p
 	}
+	Write-Host "Removing TL Mod..."
 	try {
-		Remove-Item -Path "$PriconnePath\BepInEx" -Recurse -Erroraction 'Stop'
-		Remove-Item -Path "$PriconnePath\PriconeTL_Updater.bat" -Erroraction 'SilentlyContinue'
-	}
-	catch [System.UnauthorizedAccessException] {
-		Write-Host "Requesting admin permissions to delete files..."
-		$command = "Remove-Item -Path $PriconnePath\BepInEx -Recurse -Erroraction 'SilentlyContinue'; Remove-Item -Path $PriconnePath\PriconeTL_Updater.bat -Erroraction 'SilentlyContinue'"
-		Start-Process powershell -Verb runAs -WorkingDirectory $PriconnePath -WindowStyle hidden -ArgumentList "-Command $command"
+		$UninstallFolder = @(
+			"BepInEx",
+			"TLUpdater"
+		)
+		$UninstallFile = @(
+			"PriconeTL_Updater.bat",
+			"doorstop_config.ini",
+			"winhttp.dll",
+			"Version.txt",
+			"changelog.txt"
+		)
+		foreach ($folder in $UninstallFolder) {
+			Remove-Item -Path "$PriconnePath\$folder" -Recurse -Force -Erroraction Stop
+			Write-Verbose "Removing $folder"
+		}
+		foreach ($file in $UninstallFile) {
+			if (Test-Path "$PriconnePath\$file" -PathType Leaf) {
+				Remove-Item -Path "$PriconnePath\$file" -Erroraction Stop
+				Write-Verbose "Removing $file"
+			}
+		}
 	}
 	catch {
-		Write-Verbose $_.Exception
-		Write-Error "Error(s) occurred while removing old BepInEx folder!"
-		break
+		Write-Error $_.Exception
+		exit
 	}
 }
 
@@ -109,9 +122,8 @@ function Get-TLMod {
 		Remove-Item -Path $ZipPath
 	}
 	catch {
-		Write-Verbose $_.Exception
-		Write-Error "Error(s) occurred while installing mod!"
-		break
+		Write-Error $_.Exception
+		exit
 	}
 }
 
@@ -119,24 +131,36 @@ function Update-ChangedFiles {
 	param(
 		[string]$LocalVer
 	)
-
-	Write-Verbose "Compare URI: $GithubAPI/compare/$LocalVer...main"
-	$ChangedFiles = Invoke-RestMethod -URI "$GithubAPI/compare/$LocalVer...main" | Select-Object -ExpandProperty files
-
-	foreach ($file in $ChangedFiles) {
-		if ($file.filename -match "Translation/.+") {
-			Write-Verbose "`n$($file.status): $($file.filename)"
-			switch ($file.status) {
-				{ $_ -eq "added" -or $_ -eq "modified" } {
-					#Escaping brackets from https://stackoverflow.com/questions/55869623/how-to-escape-square-brackets-in-file-paths-with-invoke-webrequests-outfile-pa/55869947#55869947
-					Invoke-RestMethod -URI $file.raw_url -OutFile "$PriconnePath/BepInEx/$([WildcardPattern]::Escape($file.filename))"
-					Write-Verbose "RawURL: $($file.raw_url)"
-				}
-				"removed" {
-					Remove-Item -LiteralPath "$PriconnePath/BepInEx/$($file.filename)"
+	
+	try {
+		Write-Verbose "Compare URI: $GithubAPI/compare/$LocalVer...main"
+		$ChangedFiles = Invoke-RestMethod -URI "$GithubAPI/compare/$LocalVer...main" | Select-Object -ExpandProperty files
+		
+		foreach ($file in $ChangedFiles) {
+			if ($file.filename -match "Translation/.+") {
+				Write-Verbose "`n$($file.status): $($file.filename)"
+				switch ($file.status) {
+					{ $_ -eq "added" -or $_ -eq "modified" } {
+						#Escaping brackets from https://stackoverflow.com/questions/55869623/how-to-escape-square-brackets-in-file-paths-with-invoke-webrequests-outfile-pa/55869947#55869947
+						Invoke-RestMethod -URI $file.raw_url -OutFile "$PriconnePath/BepInEx/$([WildcardPattern]::Escape($file.filename))"
+						Write-Verbose "RawURL: $($file.raw_url)"
+					}
+					"removed" {
+						Remove-Item -LiteralPath "$PriconnePath/BepInEx/$($file.filename)" -Recurse
+					}
+					"renamed" {
+						$newname = ($file.filename).Remove(0, ($file.filename).LastIndexOf("/") + 1)
+						Rename-Item -LiteralPath "$PriconnePath/BepInEx/$($file.previous_filename)" -NewName $newname
+					}
 				}
 			}
 		}
+		
+	}
+	catch [System.Management.Automation.MethodInvocationException] {}
+	catch {
+		Write-Error $_.Exception
+		exit
 	}
 }
 
@@ -149,9 +173,9 @@ function Import-UserConfig {
 	$Config = @{
 		"DMMGamePlayerFastLauncherSupport" = $true;
 		"CustomDMMGPFLPath"                = "";
-		"CustomDMMGPFLArguments"           = "";
 		"ForceRedownloadWhenUpdate"        = $false;
 		"TLVersion"                        = ""; 
+		"Uninstall" = $false
 	}
 
 	$UserConfig = Get-Content $Path -Erroraction SilentlyContinue | ConvertFrom-Json
@@ -166,34 +190,34 @@ function Import-UserConfig {
 	return $Config
 }
 
-if (Test-Path -Path $CfgFileLocation) {
-	$Global:PriconnePath = Get-GamePath -CfgFile $CfgFileLocation
-}
-else {
-	Write-Error "Cannot find DMM Game config file`nDid you install DMM Game?"
-	break
-}
-
+$ProgressPreference = 'SilentlyContinue'
+$CfgFileLocation = "$Env:APPDATA\dmmgameplayer5\dmmgame.cnf"
+$Global:GithubAPI = "https://api.github.com/repos/ImaterialC/PriconeTL"
+$Global:PriconnePath = Get-GamePath -CfgFile $CfgFileLocation
 $Global:Config = Import-UserConfig -Path "$PriconnePath\TLUpdater\config.json"
+
+if ($Uninstall -or $Config.Uninstall) {
+	Remove-Mod
+	Write-Host "`nDone!"
+	exit
+}
 
 Write-Host "`nChecking for update..."
 $LocalVer = Get-LocalVersion -Path $PriconnePath
-Write-Host "Current Version: $LocalVer"
 $LatestVer = Get-LatestRelease
-Write-Host "Latest Version: $($LatestVer[0])"
 
 if ($LocalVer -ge $LatestVer[0] -and $LocalVer -ne "None") {
 	Write-Host "`nYour PriconeTL version is latest!"
 }
 elseif ($LocalVer -le $LatestVer[0]) {
 	Write-Host "`nUpdating TL Mod..."
-	if (!$Config.ForceRedownloadWhenUpdate) {
+	if (!$Config.ForceRedownloadWhenUpdate -or !$ForceRedownload) {
 		Write-Verbose "Comparing your version with latest version..."
 		Update-ChangedFiles $LocalVer
 	}
 	else {
 		Write-Verbose "Redownloading TL Mod..."
-		Remove-OldMod
+		Remove-Mod
 		Get-TLMod -LinkZip $LatestVer[1] -ZipPath "$Env:TEMP\PriconeUIENDMM.zip"
 	}
 	Write-Host "`nDone!"
@@ -207,7 +231,7 @@ else {
 $Config.TLVersion = $LatestVer[0]
 New-Item -Path "$PriconnePath\TLUpdater" -ItemType "directory" -ErrorAction SilentlyContinue | Out-Null
 $Config | ConvertTo-Json | Out-File "$PriconnePath\TLUpdater\config.json" -Force
-
+exit
 if ($Config.DMMGamePlayerFastLauncherSupport) {
 	$DMMFastLauncher = @(
 		"$Env:APPDATA\DMMGamePlayerFastLauncher",
@@ -219,13 +243,9 @@ if ($Config.DMMGamePlayerFastLauncherSupport) {
 		Write-Verbose "Checking $path\DMMGamePlayerFastLauncher.exe"
 		if (Test-Path -Path "$path\DMMGamePlayerFastLauncher.exe" -PathType Leaf -ErrorAction SilentlyContinue) {
 			Write-Verbose "Found!"
-			if ($Config.CustomDMMGPFLArguments) {
-				$EscapedArguments = $Config.CustomDMMGPFLArguments.Replace("\u0027","`'")
-				Write-Verbose "Custom Arguments: $($Config.CustomDMMGPFLArguments)"
-			}
 			Write-Host "Starting PriconneR game..."
-			Start-Process -FilePath "$path\DMMGamePlayerFastLauncher.exe" -WorkingDirectory "$path" -ArgumentList "priconner $EscapedArguments"
-			break
+			Start-Process -FilePath "$path\DMMGamePlayerFastLauncher.exe" -WorkingDirectory "$path" -ArgumentList "priconner"
+			exit
 		}
 		Write-Verbose "Not Exist!"
 	}

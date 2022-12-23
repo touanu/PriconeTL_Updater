@@ -14,6 +14,10 @@ or download code from [here](https://github.com/touanu/PriconeTL_Updater/archive
 
 If PermissionDenied error is occured, run your powershell as administrator
 
+## How to uninstall
+
+You can uninstall PriconeTL with [uninstall config](#configuration) or `-Uninstall` command-line argument
+
 ## Open game without DMM Game Launcher
 
 Install [fa0311/DMMGamePlayerFastLauncher](https://github.com/fa0311/DMMGamePlayerFastLauncher) or put DMMGamePlayerFastLauncher.exe file in game folder. Script will detect exe file and run game via this FastLauncher
@@ -26,11 +30,11 @@ Default config.json:
 
 ```json
 {
-    "DMMGamePlayerFastLauncherSupport":  true,
-    "CustomDMMGPFLPath":  "",
-    "TLVersion":  "",
-    "ForceRedownloadWhenUpdate":  false,
-    "CustomDMMGPFLArguments":  ""
+  "ForceRedownloadWhenUpdate": false,
+  "Uninstall": false,
+  "DMMGamePlayerFastLauncherSupport": true,
+  "TLVersion": "",
+  "CustomDMMGPFLPath": ""
 }
 ```
 
