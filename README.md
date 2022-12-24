@@ -12,15 +12,19 @@ Simply open Powershell and type the following command:
 
 or download code from [here](https://github.com/touanu/PriconeTL_Updater/archive/main.zip)
 
-If PermissionDenied error is occured, run your powershell as administrator
+If PermissionDenied error is occurred, run your powershell as administrator
 
 ## How to uninstall
 
 You can uninstall PriconeTL with [uninstall config](#configuration) or `-Uninstall` command-line argument
 
+**This will also remove everything related to BepInEx!**
+
 ## Open game without DMM Game Launcher
 
 Install [fa0311/DMMGamePlayerFastLauncher](https://github.com/fa0311/DMMGamePlayerFastLauncher) or put DMMGamePlayerFastLauncher.exe file in game folder. Script will detect exe file and run game via this FastLauncher
+
+If the script doesn't detect executable file or you have it in different folder, you can [set a custom path in config](#configuration)
 
 ## Configuration
 

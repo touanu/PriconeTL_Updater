@@ -80,7 +80,7 @@ function Get-LatestRelease {
 }
 
 function Remove-Mod {
-	$p = Get-Process "PrincessConnectReDive" -Erroraction SilentlyContinue
+	$p = Get-Process "PrincessConnectReDive" -ErrorAction SilentlyContinue
 
 	if ($p) {
 		Write-Host "`nPriconne is still running and will be killed to remove old files!`n"
@@ -101,12 +101,12 @@ function Remove-Mod {
 			"changelog.txt"
 		)
 		foreach ($folder in $UninstallFolder) {
-			Remove-Item -Path "$PriconnePath\$folder" -Recurse -Force -Erroraction Stop
+			Remove-Item -Path "$PriconnePath\$folder" -Recurse -Force -ErrorAction Stop
 			Write-Verbose "Removing $folder"
 		}
 		foreach ($file in $UninstallFile) {
 			if (Test-Path "$PriconnePath\$file" -PathType Leaf) {
-				Remove-Item -Path "$PriconnePath\$file" -Erroraction Stop
+				Remove-Item -Path "$PriconnePath\$file" -ErrorAction Stop
 				Write-Verbose "Removing $file"
 			}
 		}
@@ -176,12 +176,12 @@ function Update-ChangedFiles {
 					"renamed" {
 						$jobs += Start-ThreadJob -Name $file.filename -ScriptBlock {
 							param(
-								$PreName,$FileName,$URI
+								$PreName, $FileName, $URI
 							)
 							try {
 								Write-Host "`nrenamed: $FileName"
-								$newname = $FileName.Remove(0, $FileName.LastIndexOf("/") + 1)
-								Rename-Item -LiteralPath "$using:PriconnePath/BepInEx/$PreName" -NewName $newname -ErrorAction Stop
+								$NewName = $FileName.Remove(0, $FileName.LastIndexOf("/") + 1)
+								Rename-Item -LiteralPath "$using:PriconnePath/BepInEx/$PreName" -NewName $NewName -ErrorAction Stop
 							}
 							catch [System.Management.Automation.PSInvalidOperationException] {
 								Write-Host "Cannot find the needed file! Download it from repo..."
@@ -216,7 +216,7 @@ function Import-UserConfig {
 		"Uninstall"                        = $false
 	}
 
-	$UserConfig = Get-Content $Path -Erroraction SilentlyContinue | ConvertFrom-Json
+	$UserConfig = Get-Content $Path -ErrorAction SilentlyContinue | ConvertFrom-Json
 	$Names = ($UserConfig | ConvertTo-Json | ConvertFrom-Json).PSObject.Properties.Name
 
 	foreach ($name in $Names) {
@@ -272,9 +272,10 @@ $Config | ConvertTo-Json | Out-File "$PriconnePath\TLUpdater\config.json" -Force
 
 if ($Config.DMMGamePlayerFastLauncherSupport) {
 	$DMMFastLauncher = @(
+		$Config.CustomDMMGPFLPath,
 		"$Env:APPDATA\DMMGamePlayerFastLauncher",
-		"$PriconnePath",
-		$Config.CustomDMMGPFLPath
+		"$PriconnePath"
+		
 	)
 
 	foreach ($path in $DMMFastLauncher) {
