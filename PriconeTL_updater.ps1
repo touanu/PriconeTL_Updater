@@ -6,6 +6,15 @@ param (
 	[switch]$ForceRedownload = $false
 )
 
+$Global:ProgressPreference = 'SilentlyContinue'
+
+if (!(Get-Module -ListAvailable -Name ThreadJob)) {
+	Write-Host "`nInstalling ThreadJob as dependency..."
+	Write-Host "^ This will only happen once!"
+	Set-PSRepository -Name 'PSGallery' -InstallationPolicy Trusted
+	Install-Module ThreadJob
+}
+
 Clear-Host
 
 function Get-GamePath {
@@ -39,7 +48,7 @@ function Get-LocalVersion {
 			$LocalVersion = $Config.TLVersion
 		}
 		else {
-			$LocalVersion = Get-Date -Date (Get-Item "$Path\BepInEx\Translation" -ErrorAction Stop).LastWriteTime -Format "yyyyMMdd"
+			$LocalVersion = Get-Content -Raw -Path "$PriconnePath\Version.txt" -ErrorAction Stop
 		}
 		Write-Host "Current Version: $LocalVersion"
 	}
@@ -131,33 +140,62 @@ function Update-ChangedFiles {
 	param(
 		[string]$LocalVer
 	)
-	
+
 	try {
-		Write-Verbose "Compare URI: $GithubAPI/compare/$LocalVer...main"
-		$ChangedFiles = Invoke-RestMethod -URI "$GithubAPI/compare/$LocalVer...main" | Select-Object -ExpandProperty files
-		
+		$SHA = Invoke-RestMethod -URI "$GithubAPI/git/ref/tags/$LocalVer" | Select-Object -ExpandProperty object | Select-Object -ExpandProperty sha
+
+		Write-Verbose "Compare URI: $GithubAPI/compare/$SHA...main"
+		$ChangedFiles = Invoke-RestMethod -URI "$GithubAPI/compare/$SHA...main" | Select-Object -ExpandProperty files
+
+		$jobs = @()
+
+		#Escaping brackets from https://stackoverflow.com/questions/55869623/how-to-escape-square-brackets-in-file-paths-with-invoke-webrequests-outfile-pa/55869947#55869947
 		foreach ($file in $ChangedFiles) {
 			if ($file.filename -match "Translation/.+") {
-				Write-Verbose "`n$($file.status): $($file.filename)"
 				switch ($file.status) {
 					{ $_ -eq "added" -or $_ -eq "modified" } {
-						#Escaping brackets from https://stackoverflow.com/questions/55869623/how-to-escape-square-brackets-in-file-paths-with-invoke-webrequests-outfile-pa/55869947#55869947
-						Invoke-RestMethod -URI $file.raw_url -OutFile "$PriconnePath/BepInEx/$([WildcardPattern]::Escape($file.filename))"
-						Write-Verbose "RawURL: $($file.raw_url)"
+						$jobs += Start-ThreadJob -Name $file.filename -ScriptBlock {
+							param (
+								$URI, $FileName, $Status
+							)
+							Write-Host "`n${Status}: $FileName"
+							Write-Host "RawURL: $URI"
+							Invoke-RestMethod -URI $URI -OutFile (New-Item -Path "$using:PriconnePath/BepInEx/$([WildcardPattern]::Escape($FileName))" -Force)
+						} -ArgumentList $file.raw_url, $file.filename, $file.status
+						
 					}
 					"removed" {
-						Remove-Item -LiteralPath "$PriconnePath/BepInEx/$($file.filename)" -Recurse
+						$jobs += Start-ThreadJob -Name $file.filename -ScriptBlock {
+							param(
+								$FileName
+							)
+							Write-Host "`nremoved: $FileName"
+							Remove-Item -LiteralPath "$using:PriconnePath/BepInEx/$FileName" -Recurse
+						} -ArgumentList $file.filename
 					}
 					"renamed" {
-						$newname = ($file.filename).Remove(0, ($file.filename).LastIndexOf("/") + 1)
-						Rename-Item -LiteralPath "$PriconnePath/BepInEx/$($file.previous_filename)" -NewName $newname
+						$jobs += Start-ThreadJob -Name $file.filename -ScriptBlock {
+							param(
+								$PreName,$FileName,$URI
+							)
+							try {
+								Write-Host "`nrenamed: $FileName"
+								$newname = $FileName.Remove(0, $FileName.LastIndexOf("/") + 1)
+								Rename-Item -LiteralPath "$using:PriconnePath/BepInEx/$PreName" -NewName $newname -ErrorAction Stop
+							}
+							catch [System.Management.Automation.PSInvalidOperationException] {
+								Write-Host "Cannot find the needed file! Download it from repo..."
+								Write-Host "RawURL: $URI"
+								Invoke-RestMethod -URI $URI -OutFile (New-Item -Path "$using:PriconnePath/BepInEx/$([WildcardPattern]::Escape($FileName))" -Force)
+							}
+						} -ArgumentList $file.previous_filename, $file.filename, $file.raw_url
 					}
 				}
 			}
 		}
-		
+
+		Receive-Job -Job $jobs -AutoRemoveJob -Wait
 	}
-	catch [System.Management.Automation.MethodInvocationException] {}
 	catch {
 		Write-Error $_.Exception
 		exit
@@ -175,7 +213,7 @@ function Import-UserConfig {
 		"CustomDMMGPFLPath"                = "";
 		"ForceRedownloadWhenUpdate"        = $false;
 		"TLVersion"                        = ""; 
-		"Uninstall" = $false
+		"Uninstall"                        = $false
 	}
 
 	$UserConfig = Get-Content $Path -Erroraction SilentlyContinue | ConvertFrom-Json
@@ -190,7 +228,6 @@ function Import-UserConfig {
 	return $Config
 }
 
-$ProgressPreference = 'SilentlyContinue'
 $CfgFileLocation = "$Env:APPDATA\dmmgameplayer5\dmmgame.cnf"
 $Global:GithubAPI = "https://api.github.com/repos/ImaterialC/PriconeTL"
 $Global:PriconnePath = Get-GamePath -CfgFile $CfgFileLocation
@@ -206,7 +243,7 @@ Write-Host "`nChecking for update..."
 $LocalVer = Get-LocalVersion -Path $PriconnePath
 $LatestVer = Get-LatestRelease
 
-if ($LocalVer -ge $LatestVer[0] -and $LocalVer -ne "None") {
+if ($LocalVer -ge $LatestVer[0].Replace(".", "") -and $LocalVer -ne "None") {
 	Write-Host "`nYour PriconeTL version is latest!"
 }
 elseif ($LocalVer -le $LatestVer[0]) {
@@ -219,6 +256,7 @@ elseif ($LocalVer -le $LatestVer[0]) {
 		Write-Verbose "Redownloading TL Mod..."
 		Remove-Mod
 		Get-TLMod -LinkZip $LatestVer[1] -ZipPath "$Env:TEMP\PriconeUIENDMM.zip"
+		$Config.ForceRedownloadWhenUpdate = $false
 	}
 	Write-Host "`nDone!"
 }
@@ -231,7 +269,7 @@ else {
 $Config.TLVersion = $LatestVer[0]
 New-Item -Path "$PriconnePath\TLUpdater" -ItemType "directory" -ErrorAction SilentlyContinue | Out-Null
 $Config | ConvertTo-Json | Out-File "$PriconnePath\TLUpdater\config.json" -Force
-exit
+
 if ($Config.DMMGamePlayerFastLauncherSupport) {
 	$DMMFastLauncher = @(
 		"$Env:APPDATA\DMMGamePlayerFastLauncher",
