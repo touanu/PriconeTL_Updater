@@ -148,43 +148,41 @@ function Update-ChangedFiles {
 			if ($file.filename -match "Translation/.+") {
 				switch ($file.status) {
 					{ $_ -eq "added" -or $_ -eq "modified" } {
-						$jobs += Start-ThreadJob -Name $file.filename -ScriptBlock {
+						$Script = {
 							param (
-								$URI, $FileName, $Status
+								$FileName, $URI
 							)
-							Write-Host "`n${Status}: $FileName"
-							Write-Host "RawURL: $URI"
+							Write-Verbose "RawURL: $URI"
 							Invoke-RestMethod -URI $URI -OutFile (New-Item -Path "$using:PriconnePath/BepInEx/$([WildcardPattern]::Escape($FileName))" -Force)
-						} -ArgumentList $file.raw_url, $file.filename, $file.status
-						
+						}
 					}
 					"removed" {
-						$jobs += Start-ThreadJob -Name $file.filename -ScriptBlock {
+						$Script = {
 							param(
 								$FileName
 							)
-							Write-Host "`nremoved: $FileName"
 							Remove-Item -LiteralPath "$using:PriconnePath/BepInEx/$FileName" -Recurse
-						} -ArgumentList $file.filename
+						}
 					}
 					"renamed" {
-						$jobs += Start-ThreadJob -Name $file.filename -ScriptBlock {
+						$Script = {
 							param(
-								$PreName, $FileName, $URI
+								$FileName, $URI, $PreName
 							)
 							try {
-								Write-Host "`nrenamed: $FileName"
 								$NewName = $FileName.Remove(0, $FileName.LastIndexOf("/") + 1)
 								Rename-Item -LiteralPath "$using:PriconnePath/BepInEx/$PreName" -NewName $NewName -ErrorAction Stop
 							}
 							catch [System.Management.Automation.PSInvalidOperationException] {
 								Write-Host "Cannot find the needed file! Download it from repo..."
-								Write-Host "RawURL: $URI"
+								Write-Verbose "RawURL: $URI"
 								Invoke-RestMethod -URI $URI -OutFile (New-Item -Path "$using:PriconnePath/BepInEx/$([WildcardPattern]::Escape($FileName))" -Force)
 							}
-						} -ArgumentList $file.previous_filename, $file.filename, $file.raw_url
+						}
 					}
 				}
+				Write-Host "$($file.status): $($file.filename)"
+				$jobs += Start-ThreadJob -Name $file.filename -ScriptBlock $Script -ArgumentList $file.filename, $file.raw_url, $file.previous_filename
 			}
 		}
 
@@ -298,7 +296,7 @@ else {
 }
 
 $Config.TLVersion = $LatestVer[0]
-New-Item -Path "$PriconnePath\TLUpdater" -ItemType "directory" -ErrorAction SilentlyContinue | Out-Null
+New-Item -Path "$PriconnePath\TLUpdater" -ItemType Directory -ErrorAction SilentlyContinue | Out-Null
 $Config | ConvertTo-Json | Out-File "$PriconnePath\TLUpdater\config.json" -Force
 
 Start-DMMFastLauncher
