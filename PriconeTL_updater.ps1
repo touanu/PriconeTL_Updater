@@ -196,6 +196,38 @@ function Update-ChangedFiles {
 	}
 }
 
+function Start-RedownloadMod {
+	param(
+		[string]$LinkZip
+	)
+
+	Write-Verbose "Redownloading TL Mod..."
+	Remove-Mod
+	Get-TLMod -LinkZip $LinkZip
+	$Config.ForceRedownloadWhenUpdate = $false
+}
+
+function Start-DMMFastLauncher {
+	if ($Config.DMMGamePlayerFastLauncherSupport) {
+		$DMMFastLauncher = @(
+			$Config.CustomDMMGPFLPath,
+			"$Env:APPDATA\DMMGamePlayerFastLauncher",
+			"$PriconnePath"
+		)
+	
+		foreach ($path in $DMMFastLauncher) {
+			Write-Verbose "Checking $path\DMMGamePlayerFastLauncher.exe"
+			if (Test-Path -Path "$path\DMMGamePlayerFastLauncher.exe" -PathType Leaf -ErrorAction SilentlyContinue) {
+				Write-Verbose "Found!"
+				Write-Host "Starting PriconneR game..."
+				Start-Process -FilePath "$path\DMMGamePlayerFastLauncher.exe" -WorkingDirectory "$path" -ArgumentList "priconner"
+				exit
+			}
+			Write-Verbose "Not Exist!"
+		}
+	}
+}
+
 function Import-UserConfig {
 	param (
 		[Parameter(Mandatory, Position = 1)]
@@ -237,9 +269,17 @@ Write-Host "`nChecking for update..."
 $LocalVer = Get-LocalVersion -Path $PriconnePath
 $LatestVer = Get-LatestRelease
 
+if ($ForceRedownload) {
+	Start-RedownloadMod -LinkZip $LatestVer[1]
+	Start-DMMFastLauncher
+	Write-Host "`nDone"
+	exit
+}
+
 if ($LocalVer -ge $LatestVer[0].Replace(".", "") -and $LocalVer -ne "None") {
 	Write-Host "`nYour PriconeTL version is latest!"
 }
+
 elseif ($LocalVer -le $LatestVer[0]) {
 	Write-Host "`nUpdating TL Mod..."
 	if (!$Config.ForceRedownloadWhenUpdate -or !$ForceRedownload) {
@@ -247,10 +287,7 @@ elseif ($LocalVer -le $LatestVer[0]) {
 		Update-ChangedFiles $LocalVer
 	}
 	else {
-		Write-Verbose "Redownloading TL Mod..."
-		Remove-Mod
-		Get-TLMod -LinkZip $LatestVer[1]
-		$Config.ForceRedownloadWhenUpdate = $false
+		Start-RedownloadMod -LinkZip $LatestVer[1]
 	}
 	Write-Host "`nDone!"
 }
@@ -264,22 +301,4 @@ $Config.TLVersion = $LatestVer[0]
 New-Item -Path "$PriconnePath\TLUpdater" -ItemType "directory" -ErrorAction SilentlyContinue | Out-Null
 $Config | ConvertTo-Json | Out-File "$PriconnePath\TLUpdater\config.json" -Force
 
-if ($Config.DMMGamePlayerFastLauncherSupport) {
-	$DMMFastLauncher = @(
-		$Config.CustomDMMGPFLPath,
-		"$Env:APPDATA\DMMGamePlayerFastLauncher",
-		"$PriconnePath"
-		
-	)
-
-	foreach ($path in $DMMFastLauncher) {
-		Write-Verbose "Checking $path\DMMGamePlayerFastLauncher.exe"
-		if (Test-Path -Path "$path\DMMGamePlayerFastLauncher.exe" -PathType Leaf -ErrorAction SilentlyContinue) {
-			Write-Verbose "Found!"
-			Write-Host "Starting PriconneR game..."
-			Start-Process -FilePath "$path\DMMGamePlayerFastLauncher.exe" -WorkingDirectory "$path" -ArgumentList "priconner"
-			exit
-		}
-		Write-Verbose "Not Exist!"
-	}
-}
+Start-DMMFastLauncher
