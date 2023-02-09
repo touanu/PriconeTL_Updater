@@ -1,9 +1,9 @@
 param (
-	[Parameter()]
 	[switch]$Uninstall = $false
 	,
-	[Parameter()]
 	[switch]$ForceRedownload = $false
+	,
+	[switch]$Verify = $false
 )
 
 $Global:ProgressPreference = 'SilentlyContinue'
@@ -135,8 +135,10 @@ function Update-ChangedFiles {
 		[string]$LocalVer
 	)
 
+	Write-Host "Updating changed files..."
+
 	try {
-		$SHA = Invoke-RestMethod -URI "$GithubAPI/git/ref/tags/$LocalVer" | Select-Object -ExpandProperty object | Select-Object -ExpandProperty sha
+		$SHA = Get-SHAVersion $LocalVer
 
 		Write-Verbose "Compare URI: $GithubAPI/compare/$SHA...main"
 		$ChangedFiles = Invoke-RestMethod -URI "$GithubAPI/compare/$SHA...main" | Select-Object -ExpandProperty files
@@ -152,8 +154,7 @@ function Update-ChangedFiles {
 							param (
 								$FileName, $URI
 							)
-							Write-Verbose "RawURL: $URI"
-							Invoke-RestMethod -URI $URI -OutFile (New-Item -Path "$using:PriconnePath/BepInEx/$([WildcardPattern]::Escape($FileName))" -Force)
+							Get-FileViaTemp -FileName $FileName -GamePath $using:PriconnePath
 						}
 					}
 					"removed" {
@@ -167,22 +168,21 @@ function Update-ChangedFiles {
 					"renamed" {
 						$Script = {
 							param(
-								$FileName, $URI, $PreName
+								$FileName, $PreName
 							)
 							try {
-								$NewName = $FileName.Remove(0, $FileName.LastIndexOf("/") + 1)
+								$NewName = Split-Path $FileName
 								Rename-Item -LiteralPath "$using:PriconnePath/BepInEx/$PreName" -NewName $NewName -ErrorAction Stop
 							}
 							catch [System.Management.Automation.PSInvalidOperationException] {
-								Write-Host "Cannot find the needed file! Download it from repo..."
-								Write-Verbose "RawURL: $URI"
-								Invoke-RestMethod -URI $URI -OutFile (New-Item -Path "$using:PriconnePath/BepInEx/$([WildcardPattern]::Escape($FileName))" -Force)
+								Write-Verbose "Cannot find the needed file! Download it from repo..."
+								Get-FileViaTemp -FileName $FileName -GamePath $using:PriconnePath
 							}
 						}
 					}
 				}
-				Write-Host "$($file.status): $($file.filename)"
-				$jobs += Start-ThreadJob -Name $file.filename -ScriptBlock $Script -ArgumentList $file.filename, $file.raw_url, $file.previous_filename
+				Write-Verbose "$($file.status): $($file.filename)"
+				$jobs += Start-ThreadJob -InitializationScript $InitScript -ScriptBlock $Script -ArgumentList $file.filename, $file.previous_filename
 			}
 		}
 
@@ -252,6 +252,35 @@ function Import-UserConfig {
 	return $Config
 }
 
+function Get-SHAVersion {
+	param (
+		[string]$Version
+	)
+
+	$SHAVersion = Invoke-RestMethod -URI "$GithubAPI/git/ref/tags/$Version" | Select-Object -ExpandProperty object | Select-Object -ExpandProperty sha
+	
+	return $SHAVersion
+}
+
+$Global:InitScript = {
+	function Get-FileViaTemp {
+		param(
+			[string]$FileName
+			,
+			[string]$GamePath
+		)
+
+		$SplitedPath = Split-Path "$GamePath\BepInEx\$FileName"
+		$URI = "https://raw.githubusercontent.com/ImaterialC/PriconeTL/main/$FileName"
+
+		Invoke-RestMethod -URI $URI -OutFile ($tempFile = New-TemporaryFile)
+		if (!(Test-Path $SplitedPath -PathType Container)) {
+			New-Item $SplitedPath -ItemType Directory -Force
+		}
+		Move-Item -LiteralPath $tempFile -Destination "$GamePath\BepInEx\$FileName" -Force
+	}
+}
+
 $CfgFileLocation = "$Env:APPDATA\dmmgameplayer5\dmmgame.cnf"
 $Global:GithubAPI = "https://api.github.com/repos/ImaterialC/PriconeTL"
 $Global:PriconnePath = Get-GamePath -CfgFile $CfgFileLocation
@@ -269,8 +298,8 @@ $LatestVer = Get-LatestRelease
 
 if ($ForceRedownload) {
 	Start-RedownloadMod -LinkZip $LatestVer[1]
-	Start-DMMFastLauncher
 	Write-Host "`nDone"
+	Start-DMMFastLauncher
 	exit
 }
 
