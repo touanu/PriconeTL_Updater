@@ -171,7 +171,7 @@ function Update-ChangedFiles {
 								$FileName, $PreName
 							)
 							try {
-								$NewName = Split-Path $FileName
+								$NewName = Split-Path $FileName -Leaf
 								Rename-Item -LiteralPath "$using:PriconnePath/BepInEx/$PreName" -NewName $NewName -ErrorAction Stop
 							}
 							catch [System.Management.Automation.PSInvalidOperationException] {
@@ -347,7 +347,7 @@ $Global:InitScript = {
 
 		Invoke-RestMethod -URI $URI -OutFile ($tempFile = New-TemporaryFile)
 		if (!(Test-Path $SplitedPath -PathType Container)) {
-			New-Item $SplitedPath -ItemType Directory -Force
+			New-Item $SplitedPath -ItemType Directory -Force | Out-Null
 		}
 		Move-Item -LiteralPath $tempFile -Destination "$GamePath\BepInEx\$FileName" -Force
 	}
