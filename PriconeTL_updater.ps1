@@ -12,10 +12,8 @@ if (!(Get-Module -ListAvailable -Name ThreadJob)) {
 	Write-Host "`nInstalling ThreadJob as dependency..."
 	Write-Host "^ This will only happen once!"
 	Set-PSRepository -Name 'PSGallery' -InstallationPolicy Trusted
-	Install-Module ThreadJob
+	Install-Module -Name ThreadJob -Force
 }
-
-Clear-Host
 
 function Get-GamePath {
 	Param(
@@ -89,24 +87,19 @@ function Remove-Mod {
 	}
 	Write-Host "Removing TL Mod..."
 	try {
-		$UninstallFolder = @(
-			"BepInEx",
-			"TLUpdater"
-		)
 		$UninstallFile = @(
+			"BepInEx",
+			"TLUpdater",
 			"PriconeTL_Updater.bat",
 			"doorstop_config.ini",
 			"winhttp.dll",
 			"Version.txt",
 			"changelog.txt"
 		)
-		foreach ($folder in $UninstallFolder) {
-			Remove-Item -Path "$PriconnePath\$folder" -Recurse -Force -ErrorAction Stop
-			Write-Verbose "Removing $folder"
-		}
+
 		foreach ($file in $UninstallFile) {
-			if (Test-Path "$PriconnePath\$file" -PathType Leaf) {
-				Remove-Item -Path "$PriconnePath\$file" -ErrorAction Stop
+			if (Test-Path "$PriconnePath\$file" -PathType Any) {
+				Remove-Item -Path "$PriconnePath\$file" -Recurse -Force -ErrorAction Stop
 				Write-Verbose "Removing $file"
 			}
 		}
@@ -119,10 +112,11 @@ function Remove-Mod {
 
 function Get-TLMod {
 	Param(
-		[System.String]$LinkZip,
-		[System.String]$ZipPath
+		[System.String]$LinkZip
 	)
 	try {
+		$ZipPath = "$Env:TEMP\PriconeTL.zip"
+
 		Write-Host "Downloading compressed mod files..."
 		Write-Verbose "Assets File: $LinkZip`n"
 		Invoke-WebRequest $LinkZip -OutFile $ZipPath
@@ -255,14 +249,14 @@ elseif ($LocalVer -le $LatestVer[0]) {
 	else {
 		Write-Verbose "Redownloading TL Mod..."
 		Remove-Mod
-		Get-TLMod -LinkZip $LatestVer[1] -ZipPath "$Env:TEMP\PriconeUIENDMM.zip"
+		Get-TLMod -LinkZip $LatestVer[1]
 		$Config.ForceRedownloadWhenUpdate = $false
 	}
 	Write-Host "`nDone!"
 }
 else {
 	Write-Host "`nDownloading and installing TL Mod..."
-	Get-TLMod -LinkZip $LatestVer[1] -ZipPath "$Env:TEMP\PriconeUIENDMM.zip"
+	Get-TLMod -LinkZip $LatestVer[1]
 	Write-Host "`nDone!"
 }
 
