@@ -26,11 +26,11 @@ function Get-GamePath {
 	}
 	catch [System.Management.Automation.ItemNotFoundException] {
 		Write-Error "Cannot find the game path!`nDid you install Priconne from DMM Game?"
-		exit
+		return
 	}
 	catch {
 		Write-Error $_.Exception
-		exit
+		return
 	}
 
 	Write-Host "Found priconner in $PriconnePath"
@@ -55,7 +55,7 @@ function Get-LocalVersion {
 	}
 	catch {
 		Write-Error $_.Exception
-		exit
+		return
 	}
 
 	return $LocalVersion
@@ -70,7 +70,7 @@ function Get-LatestRelease {
 	}
 	catch {
 		Write-Error $_.Exception
-		exit
+		return
 	}
 
 	Write-Host "Latest Version: $Version"
@@ -106,7 +106,7 @@ function Remove-Mod {
 	}
 	catch {
 		Write-Error $_.Exception
-		exit
+		return
 	}
 }
 
@@ -126,7 +126,7 @@ function Get-TLMod {
 	}
 	catch {
 		Write-Error $_.Exception
-		exit
+		return
 	}
 }
 
@@ -190,7 +190,7 @@ function Update-ChangedFiles {
 	}
 	catch {
 		Write-Error $_.Exception
-		exit
+		return
 	}
 }
 
@@ -219,7 +219,7 @@ function Start-DMMFastLauncher {
 				Write-Verbose "Found!"
 				Write-Host "Starting PriconneR game..."
 				Start-Process -FilePath "$path\DMMGamePlayerFastLauncher.exe" -WorkingDirectory "$path" -ArgumentList "priconner"
-				exit
+				return
 			}
 			Write-Verbose "Not Exist!"
 		}
@@ -228,9 +228,7 @@ function Start-DMMFastLauncher {
 
 function Import-UserConfig {
 	param (
-		[Parameter(Mandatory, Position = 1)]
-		[string]
-		$Path
+		[string]$Path
 	)
 	$Config = @{
 		"DMMGamePlayerFastLauncherSupport" = $true;
@@ -361,7 +359,7 @@ $Global:Config = Import-UserConfig -Path "$PriconnePath\TLUpdater\config.json"
 if ($Uninstall -or $Config.Uninstall) {
 	Remove-Mod
 	Write-Host "`nDone!"
-	exit
+	return
 }
 
 Write-Host "`nChecking for update..."
@@ -372,14 +370,14 @@ if ($ForceRedownload) {
 	Start-RedownloadMod -LinkZip $LatestVer[1]
 	Write-Host "`nDone"
 	Start-DMMFastLauncher
-	exit
+	return
 }
 
 if ($Verify) {
 	Compare-TLFiles $LatestVer[0]
 	Write-Host "`nDone"
 	Start-DMMFastLauncher
-	exit
+	return
 }
 
 if ($LocalVer -ge $LatestVer[0].Replace(".", "") -and $LocalVer -ne "None") {
