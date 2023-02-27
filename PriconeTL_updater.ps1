@@ -1,13 +1,17 @@
 param (
+	[Alias("U")][parameter()]
 	[switch]$Uninstall = $false
 	,
+	[Alias("FR")][parameter()]
 	[switch]$ForceRedownload = $false
 	,
+	[Alias("V")][parameter()]
 	[switch]$Verify = $false
 )
 
 If (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
-	Start-Process powershell.exe "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs;
+	Write-Host "Requesting admin privilege..."
+	Start-Process powershell.exe "-NoProfile -ExecutionPolicy Bypass -Command `"$PSCommandPath -U:`$$Uninstall -FR:`$$ForceRedownload -V:`$$Verify`"; pause" -Verb RunAs
 	exit
 }
 $Global:ProgressPreference = 'SilentlyContinue'
