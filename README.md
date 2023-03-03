@@ -6,13 +6,31 @@ A script to automate [PriconeTL](https://github.com/ImaterialC/PriconeTL) instal
 
 ## How to use
 
-Simply open Powershell and type the following command:
+### Create shortcut
 
-`irm https://bit.ly/3RjFnwE | iex`
+Right click anywhere on your Windows desktop > New > Shortcut
+
+Location of the item:
+
+```powershell
+powershell irm https://bit.ly/3RjFnwE | iex
+```
+
+![example](https://cdn.discordapp.com/attachments/815500106396729374/1081231749499068487/image.png)
+
+After that, you can use this shortcut to update PriconeTL.
+
+### Run directly from powershell
+
+Open Powershell and type the following command:
+
+```powershell
+irm https://bit.ly/3RjFnwE | iex
+```
 
 or download code from [here](https://github.com/touanu/PriconeTL_Updater/archive/main.zip)
 
-## How to uninstall
+## Uninstallation
 
 You can uninstall PriconeTL with [uninstall config](#configuration) or `-Uninstall` command-line argument
 
@@ -28,7 +46,6 @@ If the script doesn't detect executable file or you have it in different folder,
 
 Config file is auto-generated and located in `(Your priconner folder)\TLUpdater\config.json`
 
-
 | Configuration                    | Type   | Description                                                                        |
 | -------------------------------- | ------ | ---------------------------------------------------------------------------------- |
 | CustomDMMGPFLPath                | String | Custom path for DMMGamePlayerFastLauncher.exe                                      |
@@ -38,7 +55,6 @@ Config file is auto-generated and located in `(Your priconner folder)\TLUpdater\
 | Uninstall                        | Bool   | Remove all PriconeTL and **BepInEx** files                                         |
 | VerifyIgnoreFiles                | Array  | Avoid updater check, download or delete those listed files                         |
 | DMMGamePlayerFastLauncherSupport | Bool   | Use [DMMGamePlayerFastLauncher](#open-game-without-dmm-game-launcher) to open game |
-
 
 Default config.json:
 
@@ -69,8 +85,8 @@ You can pass those parameters to script via command line
 To pass parameters to remote script, [create a scriptblock from the script file and execute that](https://stackoverflow.com/a/63157192):
 `& ([scriptblock]::Create((irm https://bit.ly/3RjFnwE))) -ArgumentHere`
 
-| Argument         | Alias | Type | Default | Description                                               |
-| ---------------- | ----- | ---- | ------- | --------------------------------------------------------- |
-| -Uninstall       | -U    | Bool | False   | Remove all PriconeTL and **BepInEx** files                |
-| -ForceRedownload | -FR   | Bool | False   | Uninstall and redownload latest PriconeTL release         |
-| -Verify          | -V    | Bool | False   | Check, download any missing files, delete redundant files |
+| Argument         | Alias | Type | Default | Description                                                    |
+| ---------------- | ----- | ---- | ------- | -------------------------------------------------------------- |
+| -Uninstall       | -U    | Bool | False   | Remove all PriconeTL and **BepInEx** files                     |
+| -ForceRedownload | -FR   | Bool | False   | Uninstall and redownload latest PriconeTL release              |
+| -Verify          | -V    | Bool | False   | Only check, download any missing files, delete redundant files |
