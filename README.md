@@ -85,8 +85,8 @@ You can pass those parameters to script via command line
 To pass parameters to remote script, [create a scriptblock from the script file and execute that](https://stackoverflow.com/a/63157192):
 `& ([scriptblock]::Create((irm https://bit.ly/3RjFnwE))) -ArgumentHere`
 
-| Argument         | Alias | Type | Default | Description                                                    |
-| ---------------- | ----- | ---- | ------- | -------------------------------------------------------------- |
-| -Uninstall       | -U    | Bool | False   | Remove all PriconeTL and **BepInEx** files                     |
-| -ForceRedownload | -FR   | Bool | False   | Uninstall and redownload latest PriconeTL release              |
-| -Verify          | -V    | Bool | False   | Only check, download any missing files, delete redundant files |
+| Argument         | Alias | Type   | Default | Description                                                    |
+| ---------------- | ----- | ------ | ------- | -------------------------------------------------------------- |
+| -Uninstall       | -U    | Switch | False   | Remove all PriconeTL and **BepInEx** files                     |
+| -ForceRedownload | -FR   | Switch | False   | Uninstall and redownload latest PriconeTL release              |
+| -Verify          | -V    | Switch | False   | Only check, download any missing files, delete redundant files |
