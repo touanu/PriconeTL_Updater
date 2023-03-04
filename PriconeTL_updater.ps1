@@ -100,38 +100,31 @@ function Remove-Mod {
 		Write-Information "`nScript cannot delete mod files while PriconneR is running.`n"
 		$null = Read-Host -Prompt "Please close Priconne and press Enter to continue"
 	}
+	$UninstallFile = @(
+		"BepInEx",
+		"TLUpdater",
+		"PriconeTL_Updater.bat",
+		"doorstop_config.ini",
+		"winhttp.dll",
+		"Version.txt",
+		"changelog.txt"
+	)
 
-	try {
-		$UninstallFile = @(
-			"BepInEx",
-			"TLUpdater",
-			"PriconeTL_Updater.bat",
-			"doorstop_config.ini",
-			"winhttp.dll",
-			"Version.txt",
-			"changelog.txt"
-		)
-
-		if ($RemoveConfig) {
-			$Exclusion = @{
-				Exclude = "$PriconnePath\BepInEx\config"
-			}
-			Write-Information "`nRemoving TL Mod..."
+	if ($RemoveConfig) {
+		$Exclusion = @{
+			Exclude = "$PriconnePath\BepInEx\config"
 		}
-		else {
-			Write-Information "`nRemoving old TL Mod..."
-		}
-
-		foreach ($file in $UninstallFile) {
-			if (Test-Path "$PriconnePath\$file" -PathType Any) {
-				Remove-Item -Path "$PriconnePath\$file" -Recurse -Force -ErrorAction Stop @Exclusion
-				"Removing $file" | Out-File $LogFile -Append
-			}
-		}
+		Write-Information "`nRemoving TL Mod..."
 	}
-	catch {
-		Write-Error $_.Exception
-		return
+	else {
+		Write-Information "`nRemoving old TL Mod..."
+	}
+
+	foreach ($file in $UninstallFile) {
+		if (Test-Path "$PriconnePath\$file" -PathType Any) {
+			Remove-Item -Path "$PriconnePath\$file" -Recurse -Force @Exclusion
+			Write-Output "Removing $file"
+		}
 	}
 }
 
@@ -140,7 +133,7 @@ function Get-TLMod {
 		$ZipPath = "$Env:TEMP\PriconeTL.zip"
 
 		Write-Information "`nDownloading compressed mod files..."
-		"Assets File: $AssetLink`n" | Out-File $LogFile -Append
+		Write-Verbose "Assets File: $AssetLink`n"
 
 		Invoke-WebRequest $AssetLink -OutFile $ZipPath
 
@@ -160,7 +153,7 @@ function Update-ChangedFiles {
 
 	$SHA = Get-SHAVersion $LocalVer
 
-	"Compare URI: $GithubAPI/compare/$SHA...main" | Out-File $LogFile -Append
+	Write-Verbose "Compare URI: $GithubAPI/compare/$SHA...main"
 	$ChangedFiles = Invoke-RestMethod -URI "$GithubAPI/compare/$SHA...main" | Select-Object -ExpandProperty files
 
 	$jobs = @()
@@ -380,11 +373,12 @@ else {
 		Get-TLMod
 		Write-Output "`nDone!"
 	}
+
+	$Config.TLVersion = $LatestVer
+	New-Item -Path "$PriconnePath\TLUpdater" -ItemType Directory -ErrorAction SilentlyContinue
+	$Config | ConvertTo-Json | Out-File $UserCfgLocation -Force
+	Start-DMMFastLauncher
 }
 
-$Config.TLVersion = $LatestVer
-New-Item -Path "$PriconnePath\TLUpdater" -ItemType Directory -ErrorAction SilentlyContinue
-$Config | ConvertTo-Json | Out-File $UserCfgLocation -Force
-Start-DMMFastLauncher
 Write-Output ""
 Stop-Transcript
