@@ -125,7 +125,7 @@ function Remove-Mod {
 		foreach ($file in $UninstallFile) {
 			if (Test-Path "$PriconnePath\$file" -PathType Any) {
 				Remove-Item -Path "$PriconnePath\$file" -Recurse -Force -ErrorAction Stop @Exclusion
-				Write-Verbose "Removing $file"
+				"Removing $file" | Out-File $LogFile -Append
 			}
 		}
 	}
@@ -140,7 +140,7 @@ function Get-TLMod {
 		$ZipPath = "$Env:TEMP\PriconeTL.zip"
 
 		Write-Information "`nDownloading compressed mod files..."
-		Write-Verbose "Assets File: $AssetLink`n"
+		"Assets File: $AssetLink`n" | Out-File $LogFile -Append
 
 		Invoke-WebRequest $AssetLink -OutFile $ZipPath
 
@@ -160,7 +160,7 @@ function Update-ChangedFiles {
 
 	$SHA = Get-SHAVersion $LocalVer
 
-	Write-Verbose "Compare URI: $GithubAPI/compare/$SHA...main"
+	"Compare URI: $GithubAPI/compare/$SHA...main" | Out-File $LogFile -Append
 	$ChangedFiles = Invoke-RestMethod -URI "$GithubAPI/compare/$SHA...main" | Select-Object -ExpandProperty files
 
 	$jobs = @()
@@ -319,6 +319,10 @@ function Compare-TLFiles {
 	Receive-Job -Job $jobs -AutoRemoveJob -Wait
 }
 
+New-Item -ItemType Directory -Path "$Env:TEMP\TLUpdaterLogs" -ErrorAction SilentlyContinue
+$LogFile = "$Env:TEMP\TLUpdater-Logs\$(Get-Date -Format 'yyyy-MM-dd_HH-mm-ss').log"
+Start-Transcript -Path $LogFile | Out-Null
+
 $DMMCfgLocation = "$Env:APPDATA\dmmgameplayer5\dmmgame.cnf"
 $GithubAPI = "https://api.github.com/repos/ImaterialC/PriconeTL"
 $PriconnePath = Get-GamePath
@@ -327,60 +331,60 @@ $Config = Import-UserConfig
 
 if ($Uninstall -or $Config.Uninstall) {
 	Remove-Mod -RemoveConfig
-	Write-Output "`nDone!"
-	return
-}
-
-Write-Output "`nChecking for update..."
-$LocalVer = Get-LocalVersion
-$LatestVer, $AssetLink = Get-LatestRelease
-
-if ($LocalVer -ge $LatestVer -and $LocalVer -ne "None" -and !$ForceRedownload -and !$Verify) {
-	Write-Output "`nYour PriconeTL version is latest!"
-}
-
-elseif ($LocalVer -le $LatestVer) {
-	if (!$Config.ForceRedownloadWhenUpdate -and !$ForceRedownload) {
-		$InitScript = {
-			function Get-FileViaTemp {
-				param(
-					[string]$FileName
-					,
-					[string]$GamePath
-				)
-		
-				$SplitedPath = Split-Path "$GamePath\BepInEx\$FileName"
-				$URI = "https://raw.githubusercontent.com/ImaterialC/PriconeTL/main/$FileName"
-		
-				Invoke-RestMethod -URI $URI -OutFile ($tempFile = New-TemporaryFile)
-				if (!(Test-Path $SplitedPath -PathType Container)) {
-					New-Item $SplitedPath -ItemType Directory -Force | Out-Null
-				}
-				Move-Item -LiteralPath $tempFile -Destination "$GamePath\BepInEx\$FileName" -Force
-			}
-		}
-		Write-Output "`nUpdating TL Mod..."
-		if (!$Verify) {
-			Update-ChangedFiles
-		}
-		if ($Config.VerifyFilesAfterUpdate -or $Verify) {
-			Compare-TLFiles
-		}
-	}
-	else {
-		Remove-Mod
-		Get-TLMod
-	}
-	Write-Output "`nDone!"
 }
 else {
-	Write-Output "`nDownloading and installing TL Mod..."
-	Get-TLMod
-	Write-Output "`nDone!"
+	Write-Output "`nChecking for update..."
+	$LocalVer = Get-LocalVersion
+	$LatestVer, $AssetLink = Get-LatestRelease
+
+	if ($LocalVer -ge $LatestVer -and $LocalVer -ne "None" -and !$ForceRedownload -and !$Verify) {
+		Write-Output "`nYour PriconeTL version is latest!"
+	}
+
+	elseif ($LocalVer -le $LatestVer) {
+		if (!$Config.ForceRedownloadWhenUpdate -and !$ForceRedownload) {
+			$InitScript = {
+				function Get-FileViaTemp {
+					param(
+						[string]$FileName
+						,
+						[string]$GamePath
+					)
+		
+					$SplitedPath = Split-Path "$GamePath\BepInEx\$FileName"
+					$URI = "https://raw.githubusercontent.com/ImaterialC/PriconeTL/main/$FileName"
+		
+					Invoke-RestMethod -URI $URI -OutFile ($tempFile = New-TemporaryFile)
+					if (!(Test-Path $SplitedPath -PathType Container)) {
+						New-Item $SplitedPath -ItemType Directory -Force | Out-Null
+					}
+					Move-Item -LiteralPath $tempFile -Destination "$GamePath\BepInEx\$FileName" -Force
+				}
+			}
+			Write-Output "`nUpdating TL Mod..."
+			if (!$Verify) {
+				Update-ChangedFiles
+			}
+			if ($Config.VerifyFilesAfterUpdate -or $Verify) {
+				Compare-TLFiles
+			}
+		}
+		else {
+			Remove-Mod
+			Get-TLMod
+		}
+		Write-Output "`nDone!"
+	}
+	else {
+		Write-Output "`nDownloading and installing TL Mod..."
+		Get-TLMod
+		Write-Output "`nDone!"
+	}
 }
 
 $Config.TLVersion = $LatestVer
-New-Item -Path "$PriconnePath\TLUpdater" -ItemType Directory -ErrorAction SilentlyContinue | Out-Null
+New-Item -Path "$PriconnePath\TLUpdater" -ItemType Directory -ErrorAction SilentlyContinue
 $Config | ConvertTo-Json | Out-File $UserCfgLocation -Force
-
 Start-DMMFastLauncher
+Write-Output ""
+Stop-Transcript
