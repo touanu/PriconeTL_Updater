@@ -56,7 +56,8 @@ Config file is auto-generated and located in `(Your priconner folder)\TLUpdater\
 | VerifyIgnoreFiles                | Array  | Avoid updater check, download or delete those listed files                         |
 | DMMGamePlayerFastLauncherSupport | Bool   | Use [DMMGamePlayerFastLauncher](#open-game-without-dmm-game-launcher) to open game |
 
-Default config.json:
+<details>
+<summary>Default config.json</summary>
 
 ```json
 {
@@ -78,6 +79,8 @@ Default config.json:
     "DMMGamePlayerFastLauncherSupport":  true
 }
 ```
+
+</details>
 
 ## Arguments
 
