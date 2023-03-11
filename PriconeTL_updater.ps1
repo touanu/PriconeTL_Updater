@@ -75,10 +75,9 @@ function Get-LocalVersion {
 
 function Get-LatestRelease {
 	try {
-		$Response = Invoke-WebRequest "$GithubAPI/releases/latest"
-		$Json = $Response.Content | ConvertFrom-Json
-		$Version = $Json | Select-Object -ExpandProperty tag_name
-		$AssetsLink = $Json | Select-Object -ExpandProperty assets | Select-Object -ExpandProperty browser_download_url
+		$Response = Invoke-RestMethod "$GithubAPI/releases/latest"
+		$Version = $Response | Select-Object -ExpandProperty tag_name
+		$AssetsLink = $Response | Select-Object -ExpandProperty assets | Select-Object -ExpandProperty browser_download_url
 	}
 	catch {
 		Write-Error $_.Exception
@@ -86,7 +85,7 @@ function Get-LatestRelease {
 	}
 
 	Write-Information "Latest Version: $Version"
-	return $Version, $AssetsLink
+	return $Version, $AssetsLink[0]
 }
 
 function Remove-Mod {
