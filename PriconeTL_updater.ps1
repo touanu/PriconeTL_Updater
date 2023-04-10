@@ -309,7 +309,9 @@ function Compare-TLFiles {
 		}
 		$jobs += Start-ThreadJob -InitializationScript $InitScript -ScriptBlock $Script -ArgumentList $_.InputObject
 	}
-	Receive-Job -Job $jobs -AutoRemoveJob -Wait -ErrorAction SilentlyContinue
+	if (@($jobs).count -ne 0) {
+		Receive-Job -Job $jobs -AutoRemoveJob -Wait
+	}
 }
 
 New-Item -ItemType Directory -Path "$Env:TEMP\TLUpdaterLogs" -ErrorAction SilentlyContinue
