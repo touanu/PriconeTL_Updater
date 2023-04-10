@@ -199,7 +199,15 @@ function Update-ChangedFiles {
 			$jobs += Start-ThreadJob -InitializationScript $InitScript -ScriptBlock $Script -ArgumentList $Arguments
 		}
 	}
-	Receive-Job -Job $jobs -AutoRemoveJob -Wait
+
+	if (@($jobs).count -ne 0) {
+		Receive-Job -Job $jobs -AutoRemoveJob -Wait
+	}
+	else {
+		Write-Information "Nothing changed between two versions!`nFalling back to redownload patch..."
+		Remove-Mod
+		Get-TLMod
+	}
 }
 
 function Start-DMMFastLauncher {
@@ -309,7 +317,7 @@ function Compare-TLFiles {
 		}
 		$jobs += Start-ThreadJob -InitializationScript $InitScript -ScriptBlock $Script -ArgumentList $_.InputObject
 	}
-	Receive-Job -Job $jobs -AutoRemoveJob -Wait
+	Receive-Job -Job $jobs -AutoRemoveJob -Wait -ErrorAction SilentlyContinue
 }
 
 New-Item -ItemType Directory -Path "$Env:TEMP\TLUpdaterLogs" -ErrorAction SilentlyContinue
