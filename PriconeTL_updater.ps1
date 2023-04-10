@@ -116,6 +116,7 @@ function Remove-Mod {
 		Write-Information "`nRemoving TL Mod..."
 	}
 	else {
+		$Exclusion = @{}
 		Write-Information "`nRemoving old TL Mod..."
 	}
 
