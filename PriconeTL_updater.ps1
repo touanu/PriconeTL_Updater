@@ -54,12 +54,7 @@ function Get-GamePath {
 
 function Get-LocalVersion {
 	try {
-		if ($Config.TLVersion) {
-			$LocalVersion = $Config.TLVersion
-		}
-		else {
-			$LocalVersion = Get-Content -Raw -Path "$PriconnePath\Version.txt" -ErrorAction Stop
-		}
+		$LocalVersion = Get-Content -Raw -Path "$PriconnePath\Version.txt" -ErrorAction Stop
 		Write-Information "Current Version: $LocalVersion"
 	}
 	catch [System.Management.Automation.ItemNotFoundException] {
@@ -236,7 +231,6 @@ function Import-UserConfig {
 		"DMMGamePlayerFastLauncherSupport" = $true;
 		"CustomDMMGPFLPath"                = "";
 		"ForceRedownloadWhenUpdate"        = $false;
-		"TLVersion"                        = ""; 
 		"Uninstall"                        = $false;
 		"VerifyFilesAfterUpdate"           = $true;
 		"VerifyIgnoreFiles"                = @(
@@ -382,7 +376,7 @@ else {
 		Write-Output "`nDone!"
 	}
 
-	$Config.TLVersion = $LatestVer
+	$LatestVer | Out-File -FilePath "$PriconnePath\Version.txt" -NoNewline
 	New-Item -Path "$PriconnePath\TLUpdater" -ItemType Directory -ErrorAction SilentlyContinue
 	$Config | ConvertTo-Json | Out-File $UserCfgLocation -Force
 	Start-DMMFastLauncher
