@@ -70,8 +70,8 @@ function Get-LocalVersion {
 
 function Get-LatestRelease {
 	$PatchVersion = @{
-		""            = "";
-		"Normal"      = "";
+		""            = "^((?!(AltTexture|Textureless)).)*$";
+		"Normal"      = "^((?!(AltTexture|Textureless)).)*$";
 		"Alternative" = "AltTexture";
 		"Textureless" = "Textureless";
 	}
