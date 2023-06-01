@@ -118,16 +118,24 @@ function Remove-Mod {
 }
 
 function Get-TLMod {
+	param (
+			[string]$BackupConfig = $false
+		)
 	try {
 		$ZipPath = "$Env:TEMP\PriconeTL.zip"
-
 		Write-Information "`nDownloading compressed mod files..."
 		Write-Verbose "Assets File: $AssetLink`n"
-
 		Invoke-WebRequest $AssetLink -OutFile $ZipPath
 
+		if ($BackupConfig) {
+			Move-Item -Path "$PriconnePath\BepInEx\config" -Destination "$PriconnePath\TLUpdater" -Recurse
+		}
 		Write-Information "`nExtracting mod files to game folder..."
 		Expand-Archive -Path $ZipPath -DestinationPath $PriconnePath -Force
+
+		if ($BackupConfig) {
+			Move-Item -Path "$PriconnePath\TLUpdater" -Destination "$PriconnePath\BepInEx\config" -Recurse
+		}
 		Remove-Item -Path $ZipPath
 	}
 	catch {
@@ -193,7 +201,7 @@ function Update-ChangedFiles {
 	else {
 		Write-Information "Nothing changed between two versions!`nFalling back to redownload patch..."
 		Remove-Mod
-		Get-TLMod
+		Get-TLMod -BackupConfig
 	}
 
 	Set-Content -Path "$PriconnePath\BepInEx\Translation\en\Text\Version.txt" -Value "r:`"^Ver([0-9.]+)$`"=Ver`$1\n\nRe:TL $LatestVer\n\n\n"
@@ -353,7 +361,7 @@ else {
 		}
 		else {
 			Remove-Mod
-			Get-TLMod
+			Get-TLMod -BackupConfig
 		}
 		Write-Output "`nDone!"
 	}
