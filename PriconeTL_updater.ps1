@@ -95,32 +95,26 @@ function Remove-Mod {
 		$null = Read-Host -Prompt "Please close Priconne and press Enter to continue"
 	}
 	$UninstallFile = @(
-		"BepInEx",
-		"dotnet",
-		"TLUpdater",
-		"doorstop_config.ini",
-		"winhttp.dll",
-		"Version.txt",
-		"changelog.txt"
+		"$PriconnePath\BepInEx",
+		"$PriconnePath\dotnet",
+		"$PriconnePath\TLUpdater",
+		"$PriconnePath\.doorstop_version"
+		"$PriconnePath\doorstop_config.ini",
+		"$PriconnePath\winhttp.dll",
+		"$PriconnePath\Version.txt",
+		"$PriconnePath\changelog.txt"
 	)
 
 	if ($RemoveConfig) {
-		$Exclusion = @{}
-		Write-Information "`nRemoving TL Mod..."
+		$Exclusion = @()
+		Write-Information "`nRemoving TL Mod completely..."
 	}
 	else {
-		$Exclusion = @{
-			Exclude = @("$PriconnePath\BepInEx\config", "$PriconnePath\TLUpdater")
-		}
+		$Exclusion = "config", "TLUpdater"
 		Write-Information "`nRemoving old TL Mod..."
 	}
 
-	foreach ($file in $UninstallFile) {
-		if (Test-Path "$PriconnePath\$file" -PathType Any) {
-			Remove-Item -Path "$PriconnePath\$file" -Recurse -Force @Exclusion
-			Write-Output "Removing $file"
-		}
-	}
+	Get-ChildItem -Path $UninstallFile -Exclude $Exclusion -Recurse | Remove-Item -Force -Recurse
 }
 
 function Get-TLMod {
@@ -148,8 +142,8 @@ function Update-ChangedFiles {
 	Write-Verbose "Compare URI: $GithubAPI/compare/$LocalVer...$LatestVer"
 	$ChangedFiles = Invoke-RestMethod -URI "$GithubAPI/compare/$LocalVer...$LatestVer" | Select-Object -ExpandProperty files
 
-	$jobs = @()
-	foreach ($file in $ChangedFiles) {
+	$jobs = $ChangedFiles | . { process {
+		$file = $_
 		if ($file.filename -match "^src/.+") {
 			$filename = $file.filename.Replace("src/","")
 			switch ($file.status) {
@@ -189,9 +183,9 @@ function Update-ChangedFiles {
 					$Arguments = @($filename, $previous_filename)
 				}
 			}
-			$jobs += Start-ThreadJob -InitializationScript $InitScript -ScriptBlock $Script -ArgumentList $Arguments
+			Start-ThreadJob -InitializationScript $InitScript -ScriptBlock $Script -ArgumentList $Arguments
 		}
-	}
+	}}
 
 	if (@($jobs).count -ne 0) {
 		Receive-Job -Job $jobs -AutoRemoveJob -Wait
@@ -257,8 +251,6 @@ function Compare-TLFiles {
 	Write-Information "Verifying..."
 
 	$SHA = Invoke-RestMethod -URI "$GithubAPI/git/ref/tags/$LatestVer" | Select-Object -ExpandProperty object | Select-Object -ExpandProperty sha
-	$LocalFiles = @()
-	$RemoteFiles = @()
 	$LocalPaths = @(
 		"$PriconnePath\BepInEx\Translation",
 		"$PriconnePath\BepInEx\config\AutoTranslatorConfig.ini",
@@ -273,22 +265,21 @@ function Compare-TLFiles {
 		"$PriconnePath\doorstop_config.ini",
 		"$PriconnePath\winhttp.dll"
 	)
-	$jobs = @()
 
-	(Get-ChildItem -Path $LocalPaths -Recurse -File) | ForEach-Object {
+	$LocalFiles = (Get-ChildItem -Path $LocalPaths -Recurse -File) | . { process {
 		$Path = $_.FullName.Replace("$PriconnePath\", "").Replace("\", "/")
-		if (!($Path -in $Config.VerifyIgnoreFiles)) {
-			$LocalFiles += $Path
+		if ($Path -notin $Config.VerifyIgnoreFiles) {
+			$Path
 		}
-	}
+	}}
 
-	(Invoke-RestMethod "$GithubAPI/git/trees/${SHA}?recursive=0").tree | ForEach-Object {
+	$RemoteFiles = (Invoke-RestMethod "$GithubAPI/git/trees/${SHA}?recursive=0").tree | . { process {
 		if (($_.path -match "^src/.+") -and ($_.type -eq "blob") -and ($_.path -notin $Config.VerifyIgnoreFiles)) {
-			$RemoteFiles += $_.path.Replace("src/","")
+			$_.path.Replace("src/","")
 		}
-	}
+	}}
 
-	Compare-Object -ReferenceObject $LocalFiles -DifferenceObject $RemoteFiles | ForEach-Object {
+	$jobs = Compare-Object -ReferenceObject $LocalFiles -DifferenceObject $RemoteFiles | . { process {
 		switch ($_.SideIndicator) {
 			"<=" {
 				$Script = {
@@ -303,8 +294,8 @@ function Compare-TLFiles {
 				}
 			}
 		}
-		$jobs += Start-ThreadJob -InitializationScript $InitScript -ScriptBlock $Script -ArgumentList $_.InputObject
-	}
+		Start-ThreadJob -InitializationScript $InitScript -ScriptBlock $Script -ArgumentList $_.InputObject
+	}}
 	if (@($jobs).count -ne 0) {
 		Receive-Job -Job $jobs -AutoRemoveJob -Wait
 	}
