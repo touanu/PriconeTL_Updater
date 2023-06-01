@@ -35,9 +35,8 @@ if (!(Get-Module -ListAvailable -Name ThreadJob)) {
 
 function Get-GamePath {
 	try {
-		$CfgFileContent = Get-Content $DMMCfgLocation -ErrorAction Stop | ConvertFrom-Json
-		$DetailContent = $CfgFileContent.contents | Where-Object { $_.productId -eq "priconner" }
-		$PriconnePath = $DetailContent.detail.path
+		$CfgFileContent = Get-Content "$Env:APPDATA\dmmgameplayer5\dmmgame.cnf" -ErrorAction Stop | ConvertFrom-Json
+		$PriconnePath = ($CfgFileContent.contents | Where-Object productId -eq "priconner").detail.path
 	}
 	catch [System.Management.Automation.ItemNotFoundException] {
 		Write-Error "Cannot find the game path!`nDid you install Priconne from DMM Game?"
@@ -54,7 +53,8 @@ function Get-GamePath {
 
 function Get-LocalVersion {
 	try {
-		$LocalVersion = Get-Content -Raw -Path "$PriconnePath\Version.txt" -ErrorAction Stop
+		$RawVersionFile = Get-Content -Raw -Path "$PriconnePath\BepInEx\Translation\en\Text\Version.txt" -ErrorAction Stop
+		$LocalVersion = $RawVersionFile | Select-String '\d{8}' | Select-Object -ExpandProperty Matches | Select-Object -ExpandProperty Value
 		Write-Information "Current Version: $LocalVersion"
 	}
 	catch [System.Management.Automation.ItemNotFoundException] {
@@ -69,16 +69,10 @@ function Get-LocalVersion {
 }
 
 function Get-LatestRelease {
-	$PatchVersion = @{
-		""            = "^((?!(AltTexture|Textureless)).)*$";
-		"Normal"      = "^((?!(AltTexture|Textureless)).)*$";
-		"Alternative" = "AltTexture";
-		"Textureless" = "Textureless";
-	}
 	try {
 		$Response = Invoke-RestMethod "$GithubAPI/releases/latest"
 		$Version = $Response | Select-Object -ExpandProperty tag_name
-		$AssetsLink = $Response | Select-Object -ExpandProperty assets | Select-Object -ExpandProperty browser_download_url | Where-Object { $_ -match $PatchVersion.($Config.PatchVersion) }
+		$AssetsLink = $Response | Select-Object -ExpandProperty assets | Select-Object -ExpandProperty browser_download_url
 	}
 	catch {
 		Write-Error $_.Exception
@@ -102,8 +96,8 @@ function Remove-Mod {
 	}
 	$UninstallFile = @(
 		"BepInEx",
+		"dotnet",
 		"TLUpdater",
-		"PriconeTL_Updater.bat",
 		"doorstop_config.ini",
 		"winhttp.dll",
 		"Version.txt",
@@ -116,7 +110,7 @@ function Remove-Mod {
 	}
 	else {
 		$Exclusion = @{
-			Exclude = "$PriconnePath\BepInEx\config"
+			Exclude = @("$PriconnePath\BepInEx\config", "$PriconnePath\TLUpdater")
 		}
 		Write-Information "`nRemoving old TL Mod..."
 	}
@@ -151,46 +145,39 @@ function Get-TLMod {
 function Update-ChangedFiles {
 	Write-Information "Updating changed files...`n"
 
-
-	$SHA = Get-SHAVersion $LocalVer
-	Write-Verbose "Compare URI: $GithubAPI/compare/$SHA...main"
-	$ChangedFiles = Invoke-RestMethod -URI "$GithubAPI/compare/$SHA...main" | Select-Object -ExpandProperty files
+	Write-Verbose "Compare URI: $GithubAPI/compare/$LocalVer...$LatestVer"
+	$ChangedFiles = Invoke-RestMethod -URI "$GithubAPI/compare/$LocalVer...$LatestVer" | Select-Object -ExpandProperty files
 
 	$jobs = @()
-	if ($Config.PatchVersion -ne "Textureless") {
-		$RemotePath = "(Translation/|config/)"
-	}
-	else {
-		$RemotePath = "(Translation/en/Text/|config/)"
-	}
-
 	foreach ($file in $ChangedFiles) {
-		if ($file.filename -match $RemotePath) {
+		if ($file.filename -match "^src/.+") {
+			$filename = $file.filename.Replace("src/","")
 			switch ($file.status) {
 				{ $_ -eq "added" -or $_ -eq "modified" } {
 					$Script = {
 						Get-FileViaTemp -FileName $args[0] -GamePath $using:PriconnePath
 						Write-Output "$($args[1]): $($args[0])"
 					}
-					$Arguments = @($file.filename, $file.status)
+					$Arguments = @($filename, $file.status)
 				}
 				"removed" {
 					$Script = {
 						try {
-							Remove-Item -LiteralPath "$using:PriconnePath/BepInEx/$args" -Recurse -ErrorAction Stop
+							Remove-Item -LiteralPath "$using:PriconnePath/$args" -Recurse -ErrorAction Stop
 							Write-Output "removed: $args"
 						}
 						catch [System.Management.Automation.ItemNotFoundException] {
 							Write-Output "not found: $args"
 						}
 					}
-					$Arguments = $file.filename
+					$Arguments = $filename
 				}
 				"renamed" {
+					$previous_filename = $file.previous_filename.Replace("src/", "")
 					$Script = {
 						try {
 							$NewName = Split-Path $args[0] -Leaf
-							Rename-Item -LiteralPath "$using:PriconnePath/BepInEx/$($args[1])" -NewName $NewName -ErrorAction Stop
+							Rename-Item -LiteralPath "$using:PriconnePath/$($args[1])" -NewName $NewName -ErrorAction Stop
 							Write-Output "renamed: $($args[0])"
 						}
 						catch [System.Management.Automation.PSInvalidOperationException] {
@@ -199,7 +186,7 @@ function Update-ChangedFiles {
 							Write-Output "added: $($args[0])"
 						}
 					}
-					$Arguments = @($file.filename, $file.previous_filename)
+					$Arguments = @($filename, $previous_filename)
 				}
 			}
 			$jobs += Start-ThreadJob -InitializationScript $InitScript -ScriptBlock $Script -ArgumentList $Arguments
@@ -242,7 +229,6 @@ function Import-UserConfig {
 		"DMMGamePlayerFastLauncherSupport" = $true;
 		"CustomDMMGPFLPath"                = "";
 		"ForceRedownloadWhenUpdate"        = $false;
-		"PatchVersion"                     = "";
 		"Uninstall"                        = $false;
 		"VerifyFilesAfterUpdate"           = $true;
 		"VerifyIgnoreFiles"                = @(
@@ -263,55 +249,42 @@ function Import-UserConfig {
 		$Config.$name = $UserConfig.$name
 	}
 
-	if ($Config.PatchVersion -eq "Alternative" -and $Config.ForceRedownloadWhenUpdate -eq $false) {
-		$Config.ForceRedownloadWhenUpdate = $true
-		Write-Information "Alternative doesn't support updating changed file mode`nSwitched back to force redownload mode"
-	}
-
 	Write-Verbose "Config: $Config"
 	return $Config
-}
-
-function Get-SHAVersion {
-	param (
-		[string]$Version
-	)
-
-	try {
-		$SHAVersion = Invoke-RestMethod -URI "$GithubAPI/git/ref/tags/$Version" | Select-Object -ExpandProperty object | Select-Object -ExpandProperty sha
-	}
-	catch {
-		Write-Error $_.Exception
-		exit
-	}
-	return $SHAVersion
 }
 
 function Compare-TLFiles {
 	Write-Information "Verifying..."
 
-	$SHA = Get-SHAVersion $LatestVer
+	$SHA = Invoke-RestMethod -URI "$GithubAPI/git/ref/tags/$LatestVer" | Select-Object -ExpandProperty object | Select-Object -ExpandProperty sha
 	$LocalFiles = @()
 	$RemoteFiles = @()
+	$LocalPaths = @(
+		"$PriconnePath\BepInEx\Translation",
+		"$PriconnePath\BepInEx\config\AutoTranslatorConfig.ini",
+		"$PriconnePath\BepInEx\core",
+		"$PriconnePath\BepInEx\plugins\XUnity.AutoTranslator",
+		"$PriconnePath\BepInEx\plugins\XUnity.ResourceRedirector",
+		"$PriconnePath\BepInEx\plugins\FullScreenizer.dll",
+		"$PriconnePath\BepInEx\plugins\PriconneTLFixup.dll",
+		"$PriconnePath\dotnet",
+		"$PriconnePath\.doorstop_version",
+		"$PriconnePath\changelog.txt",
+		"$PriconnePath\doorstop_config.ini",
+		"$PriconnePath\winhttp.dll"
+	)
 	$jobs = @()
 
-	if ($Config.PatchVersion -ne "Textureless") {
-		$RemotePath = "^(Translation/|config/AutoTranslatorConfig.ini|config/BepInEx.cfg)"
-	}
-	else {
-		$RemotePath = "^(Translation/en/Text/|config/AutoTranslatorConfig.ini|config/BepInEx.cfg)"
-	}
-
-	(Get-ChildItem -Path "$PriconnePath\BepInEx\Translation", "$PriconnePath\BepInEx\config\AutoTranslatorConfig.ini", "$PriconnePath\BepInEx\config\BepInEx.cfg" -Recurse -File) | ForEach-Object {
-		$Path = $_.FullName.Replace("$PriconnePath\BepInEx\", "").Replace("\", "/")
+	(Get-ChildItem -Path $LocalPaths -Recurse -File) | ForEach-Object {
+		$Path = $_.FullName.Replace("$PriconnePath\", "").Replace("\", "/")
 		if (!($Path -in $Config.VerifyIgnoreFiles)) {
 			$LocalFiles += $Path
 		}
 	}
 
 	(Invoke-RestMethod "$GithubAPI/git/trees/${SHA}?recursive=0").tree | ForEach-Object {
-		if (($_.path -match $RemotePath) -and ($_.type -eq "blob") -and ($_.path -notin $Config.VerifyIgnoreFiles)) {
-			$RemoteFiles += $_.path
+		if (($_.path -match "^src/.+") -and ($_.type -eq "blob") -and ($_.path -notin $Config.VerifyIgnoreFiles)) {
+			$RemoteFiles += $_.path.Replace("src/","")
 		}
 	}
 
@@ -319,7 +292,7 @@ function Compare-TLFiles {
 		switch ($_.SideIndicator) {
 			"<=" {
 				$Script = {
-					Remove-Item -LiteralPath "$using:PriconnePath\BepInEx\$args"
+					Remove-Item -LiteralPath "$using:PriconnePath\$args"
 					Write-Output "removed: $args"
 				}
 			}
@@ -341,8 +314,7 @@ New-Item -ItemType Directory -Path "$Env:TEMP\TLUpdaterLogs" -ErrorAction Silent
 $LogFile = "$Env:TEMP\TLUpdater-Logs\$(Get-Date -Format 'yyyy-MM-dd_HH-mm-ss').log"
 Start-Transcript -Path $LogFile | Out-Null
 
-$DMMCfgLocation = "$Env:APPDATA\dmmgameplayer5\dmmgame.cnf"
-$GithubAPI = "https://api.github.com/repos/ImaterialC/PriconeTL"
+$GithubAPI = "https://api.github.com/repos/ImaterialC/PriconneRe-TL"
 $PriconnePath = Get-GamePath
 $UserCfgLocation = "$PriconnePath\TLUpdater\config.json"
 $Config = Import-UserConfig
@@ -368,14 +340,15 @@ else {
 						[string]$GamePath
 					)
 		
-					$SplitedPath = Split-Path "$GamePath\BepInEx\$FileName"
-					$URI = "https://raw.githubusercontent.com/ImaterialC/PriconeTL/main/$FileName"
+					$SplitedPath = Split-Path "$GamePath\$FileName"
+					$URI = "https://raw.githubusercontent.com/ImaterialC/PriconneRe-TL/master/src/$FileName"
+					# Write-Output "URI: $URI"
 		
 					Invoke-RestMethod -URI $URI -OutFile ($tempFile = New-TemporaryFile)
 					if (!(Test-Path $SplitedPath -PathType Container)) {
 						New-Item $SplitedPath -ItemType Directory -Force | Out-Null
 					}
-					Move-Item -LiteralPath $tempFile -Destination "$GamePath\BepInEx\$FileName" -Force
+					Move-Item -LiteralPath $tempFile -Destination "$GamePath\$FileName" -Force
 				}
 			}
 			if (!$Verify) {
@@ -384,7 +357,6 @@ else {
 			if ($Config.VerifyFilesAfterUpdate -or $Verify) {
 				Compare-TLFiles
 			}
-			$LatestVer | Out-File -FilePath "$PriconnePath\Version.txt" -NoNewline
 		}
 		else {
 			Remove-Mod
@@ -394,10 +366,6 @@ else {
 	}
 	else {
 		Write-Output "`nDownloading and installing TL Mod..."
-		if ((Get-WmiObject Win32_VideoController).Name -match "AMD" -and $LocalVer -eq "None") {
-			$Config.PatchVersion = "Alternative"
-			$null, $AssetLink = Get-LatestRelease
-		}
 		Get-TLMod
 		Write-Output "`nDone!"
 	}
