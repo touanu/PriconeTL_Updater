@@ -195,6 +195,9 @@ function Update-ChangedFiles {
 		Remove-Mod
 		Get-TLMod
 	}
+
+	$Version = "$PriconnePath\BepInEx\Translation\en\Text\Version.txt"
+	Set-Content -Path $Version -Value (Get-Content $Version).Replace($LocalVer, $LatestVer)
 }
 
 function Start-DMMFastLauncher {
