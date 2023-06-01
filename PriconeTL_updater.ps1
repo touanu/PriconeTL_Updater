@@ -54,7 +54,7 @@ function Get-GamePath {
 function Get-LocalVersion {
 	try {
 		$RawVersionFile = Get-Content -Raw -Path "$PriconnePath\BepInEx\Translation\en\Text\Version.txt" -ErrorAction Stop
-		$LocalVersion = $RawVersionFile | Select-String '\d{8}' | Select-Object -ExpandProperty Matches | Select-Object -ExpandProperty Value
+		$LocalVersion = $RawVersionFile | Select-String '\d{8}\w?' | Select-Object -ExpandProperty Matches | Select-Object -ExpandProperty Value
 		Write-Information "Current Version: $LocalVersion"
 	}
 	catch [System.Management.Automation.ItemNotFoundException] {
@@ -196,8 +196,7 @@ function Update-ChangedFiles {
 		Get-TLMod
 	}
 
-	$Version = "$PriconnePath\BepInEx\Translation\en\Text\Version.txt"
-	Set-Content -Path $Version -Value (Get-Content $Version).Replace($LocalVer, $LatestVer)
+	Set-Content -Path "$PriconnePath\BepInEx\Translation\en\Text\Version.txt" -Value "r:`"^Ver([0-9.]+)$`"=Ver`$1\n\nRe:TL $LatestVer\n\n\n"
 }
 
 function Start-DMMFastLauncher {
