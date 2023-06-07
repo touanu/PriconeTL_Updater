@@ -124,11 +124,11 @@ function Get-TLMod {
 		Write-Verbose "Assets File: $AssetLink`n"
 		Invoke-WebRequest $AssetLink -OutFile $ZipPath
 
-		Move-Item -Path "$PriconnePath\BepInEx\config" -Destination "$PriconnePath\TLUpdater" -Recurse -ErrorAction SilentlyContinue
+		Move-Item -Path "$PriconnePath\BepInEx\config" -Destination "$PriconnePath\TLUpdater" -ErrorAction SilentlyContinue
 		Write-Information "`nExtracting mod files to game folder..."
 		Expand-Archive -Path $ZipPath -DestinationPath $PriconnePath -Force
 
-		Move-Item -Path "$PriconnePath\TLUpdater" -Destination "$PriconnePath\BepInEx\config" -Recurse -ErrorAction SilentlyContinue
+		Move-Item -Path "$PriconnePath\TLUpdater" -Destination "$PriconnePath\BepInEx\config" -ErrorAction SilentlyContinue
 		Remove-Item -Path $ZipPath
 	}
 	catch {
