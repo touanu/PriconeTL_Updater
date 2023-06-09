@@ -206,14 +206,14 @@ function Update-ChangedFiles {
 
 	if (@($jobs).count -ne 0) {
 		Receive-Job -Job $jobs -AutoRemoveJob -Wait
+		$Version = Get-Content "$PriconnePath\BepInEx\Translation\en\Text\Version.txt"
+		Set-Content -Path "$PriconnePath\BepInEx\Translation\en\Text\Version.txt" -Value $Version.Replace($LocalVer, $LatestVer)
 	}
 	else {
 		Write-Information "Nothing changed between two versions!`nFalling back to redownload patch..."
 		Remove-Mod
 		Get-TLMod
 	}
-
-	Set-Content -Path "$PriconnePath\BepInEx\Translation\en\Text\Version.txt" -Value "r:`"^Ver([0-9.]+)$`"=Ver`$1\n\nRe:TL $LatestVer\n\n\n"
 }
 
 function Start-DMMFastLauncher {
