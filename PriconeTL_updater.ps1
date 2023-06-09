@@ -103,14 +103,13 @@ function Remove-Mod {
 		"doorstop_config.ini",
 		"winhttp.dll",
 		"changelog.txt",
-		"Version.txt"
+		"Version.txt",
+		"ReTL_Updater.lnk"
 	)
 
 	if ($RemoveConfig) {
-		$UninstallFile.Add(@(
-			"BepInEx",
-			"TLUpdater"
-		))
+		$null = $UninstallFile.Add("BepInEx")
+		$null = $UninstallFile.Add("TLUpdater")
 		Write-Information "`nRemoving TL Mod completely..."
 	}
 	else {
