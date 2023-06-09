@@ -94,42 +94,58 @@ function Remove-Mod {
 		Write-Information "`nScript cannot delete mod files while PriconneR is running.`n"
 		$null = Read-Host -Prompt "Please close Priconne and press Enter to continue"
 	}
-	$UninstallFile = @(
-		"$PriconnePath\BepInEx",
+	$UninstallFile = [System.Collections.ArrayList]@(
+		"$PriconnePath\BepInEx\core",
+		"$PriconnePath\BepInEx\plugins",
+		"$PriconnePath\BepInEx\Translation",
 		"$PriconnePath\dotnet",
-		"$PriconnePath\TLUpdater",
 		"$PriconnePath\.doorstop_version"
 		"$PriconnePath\doorstop_config.ini",
 		"$PriconnePath\winhttp.dll",
-		"$PriconnePath\Version.txt",
 		"$PriconnePath\changelog.txt"
 	)
 
 	if ($RemoveConfig) {
-		$Exclusion = @()
+		$UninstallFile.Add(@(
+			"$PriconnePath\BepInEx",
+			"$PriconnePath\TLUpdater"
+		))
 		Write-Information "`nRemoving TL Mod completely..."
 	}
 	else {
-		$Exclusion = "config", "TLUpdater"
 		Write-Information "`nRemoving old TL Mod..."
 	}
 
-	Get-ChildItem -Path $UninstallFile -Exclude $Exclusion -Recurse | Remove-Item -Force -Recurse
+	Remove-Item -Path $UninstallFile -Recurse -Force
 }
 
 function Get-TLMod {
 	try {
-		$ZipPath = "$Env:TEMP\PriconeTL.zip"
+		Add-Type -Assembly System.IO.Compression.FileSystem
 		Write-Information "`nDownloading compressed mod files..."
 		Write-Verbose "Assets File: $AssetLink`n"
-		Invoke-WebRequest $AssetLink -OutFile $ZipPath
+		Invoke-WebRequest $AssetLink -OutFile ($tempFile = New-TemporaryFile)
 
-		Move-Item -Path "$PriconnePath\BepInEx\config" -Destination "$PriconnePath\TLUpdater" -ErrorAction SilentlyContinue
 		Write-Information "`nExtracting mod files to game folder..."
-		Expand-Archive -Path $ZipPath -DestinationPath $PriconnePath -Force
+		$zip = [IO.Compression.ZipFile]::OpenRead($tempFile)
+		if (Test-Path "$PriconnePath\BepInEx\config\*") {
+			$entries=$zip.Entries | Where-Object {$_.FullName -notmatch ".+\.ini$"}
+		}
+		else {
+			$entries=$zip.Entries
+		}
+		$entries | . { process {
+			if ($_.Name -ne "") {
+				$SplitedPath = "$PriconnePath\$(Split-Path $_.FullName)"
+				if (!(Test-Path "$SplitedPath")) {
+					New-Item -Path $SplitedPath -ItemType Directory
+				}
+				[IO.Compression.ZipFileExtensions]::ExtractToFile( $_, "$PriconnePath\" + $_.FullName, $true)
+			}
+		}} | Out-Null
+		$zip.Dispose()
 
-		Move-Item -Path "$PriconnePath\TLUpdater" -Destination "$PriconnePath\BepInEx\config" -ErrorAction SilentlyContinue
-		Remove-Item -Path $ZipPath
+		Remove-Item -Path $tempFile
 	}
 	catch {
 		Write-Error $_.Exception
