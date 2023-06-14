@@ -95,21 +95,22 @@ function Remove-Mod {
 		$null = Read-Host -Prompt "Please close Priconne and press Enter to continue"
 	}
 	$UninstallFile = [System.Collections.ArrayList]@(
-		"BepInEx\core",
-		"BepInEx\plugins",
-		"BepInEx\Translation",
-		"dotnet",
-		".doorstop_version"
-		"doorstop_config.ini",
-		"winhttp.dll",
-		"changelog.txt",
-		"Version.txt",
-		"ReTL_Updater.lnk"
+		"$PriconnePath\BepInEx\core",
+		"$PriconnePath\BepInEx\plugins",
+		"$PriconnePath\BepInEx\Translation",
+		"$PriconnePath\dotnet",
+		"$PriconnePath\.doorstop_version"
+		"$PriconnePath\doorstop_config.ini",
+		"$PriconnePath\winhttp.dll",
+		"$PriconnePath\changelog.txt",
+		"$PriconnePath\Version.txt",
+		"$PriconnePath\ReTL_Updater.lnk"
 	)
 
 	if ($RemoveConfig) {
-		$null = $UninstallFile.Add("BepInEx")
-		$null = $UninstallFile.Add("TLUpdater")
+		$null = $UninstallFile.Add("$PriconnePath\BepInEx")
+		$null = $UninstallFile.Add("$PriconnePath\TLUpdater")
+		$null = $UninstallFile.Add("${Env:APPDATA}\BepInEx")
 		Write-Information "`nRemoving TL Mod completely..."
 	}
 	else {
@@ -117,8 +118,8 @@ function Remove-Mod {
 	}
 
 	foreach ($file in $UninstallFile) {
-		if (Test-Path "$PriconnePath\$file" -PathType Any) {
-			Remove-Item -Path "$PriconnePath\$file" -Recurse -Force
+		if (Test-Path "$file" -PathType Any) {
+			Remove-Item -Path "$file" -Recurse -Force
 			Write-Output "Removing $file"
 		}
 	}
