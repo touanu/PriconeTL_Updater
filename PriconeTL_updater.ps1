@@ -212,7 +212,7 @@ function Update-ChangedFiles {
 	if (@($jobs).count -ne 0) {
 		Receive-Job -Job $jobs -AutoRemoveJob -Wait
 		$Version = Get-Content "$PriconnePath\BepInEx\Translation\en\Text\Version.txt"
-		Set-Content -Path "$PriconnePath\BepInEx\Translation\en\Text\Version.txt" -Value $Version.Replace($LocalVer, $LatestVer)
+		Set-Content -Path "$PriconnePath\BepInEx\Translation\en\Text\Version.txt" -Value $Version.Replace("Pre-release", $LatestVer).Replace($LocalVer, $LatestVer)
 	}
 	else {
 		Write-Information "Nothing changed between two versions!`nFalling back to redownload patch..."
@@ -232,7 +232,7 @@ function Start-DMMFastLauncher {
 		foreach ($path in $DMMFastLauncher) {
 			Write-Verbose "Checking $path\DMMGamePlayerFastLauncher.exe"
 			if (Test-Path -Path "$path\DMMGamePlayerFastLauncher.exe" -PathType Leaf -ErrorAction SilentlyContinue) {
-				Write-Information "Found DMMGamePlayerFastLauncher in $path!"
+				Write-Verbose "Found DMMGamePlayerFastLauncher in $path!"
 				Write-Information "Starting PriconneR game..."
 				Start-Process -FilePath "$path\DMMGamePlayerFastLauncher.exe" -WorkingDirectory "$path" -ArgumentList "priconner"
 				return
@@ -382,7 +382,7 @@ else {
 		Write-Output "`nDone!"
 	}
 
-	New-Item -Path "$PriconnePath\TLUpdater" -ItemType Directory -ErrorAction SilentlyContinue
+	New-Item -Path "$PriconnePath\TLUpdater" -ItemType Directory -ErrorAction SilentlyContinue | Out-Null
 	$Config | ConvertTo-Json | Out-File $UserCfgLocation -Force
 	Start-DMMFastLauncher
 }
