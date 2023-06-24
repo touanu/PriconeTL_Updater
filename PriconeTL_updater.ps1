@@ -258,7 +258,7 @@ function Import-UserConfig {
 	}
 
 	$UserConfig = Get-Content $UserCfgLocation -ErrorAction SilentlyContinue | ConvertFrom-Json
-	$Names = ($UserConfig | ConvertTo-Json | ConvertFrom-Json).PSObject.Properties.Name
+	$Names = $UserConfig.PSOBject.Properties.Name
 
 	foreach ($name in $Names) {
 		Write-Verbose "Import Config: $name = $($UserConfig.$name)"
