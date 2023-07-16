@@ -13,7 +13,7 @@ Right click anywhere on your Windows desktop > New > Shortcut
 Location of the item:
 
 ```powershell
-powershell irm https://bit.ly/3RjFnwE | iex
+powershell irm https://raw.githubusercontent.com/touanu/PriconeTL_Updater/main/PriconeTL_updater.ps1 | iex
 ```
 
 ![example](https://cdn.discordapp.com/attachments/815500106396729374/1081231749499068487/image.png)
@@ -25,7 +25,7 @@ After that, you can use this shortcut to update PriconeTL.
 Open Powershell and type the following command:
 
 ```powershell
-irm https://bit.ly/3RjFnwE | iex
+irm https://raw.githubusercontent.com/touanu/PriconeTL_Updater/main/PriconeTL_updater.ps1 | iex
 ```
 
 or download code from [here](https://github.com/touanu/PriconeTL_Updater/archive/main.zip)
