@@ -9,6 +9,8 @@ param (
 	[switch]$Verify = $false
 )
 
+$Global:ProgressPreference = 'SilentlyContinue'
+$Global:InformationPreference = 'Continue'
 If (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
 	Write-Output "Requesting admin privilege..."
 	$arguments = "-U:`$$Uninstall -FR:`$$ForceRedownload -V:`$$Verify"
@@ -18,25 +20,17 @@ If (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]:
 	}
 	else {
 		Write-Verbose "Using remote script"
-		$Command = "& ([scriptblock]::Create((irm https://bit.ly/3RjFnwE))) $arguments"
+		$Command = "& ([scriptblock]::Create((irm https://raw.githubusercontent.com/touanu/PriconeTL_Updater/main/PriconeTL_updater.ps1))) $arguments"
 	}
 	Start-Process powershell.exe "-NoProfile -ExecutionPolicy Bypass -Command `"$Command`"; pause" -Verb RunAs
 	exit
-}
-$Global:ProgressPreference = 'SilentlyContinue'
-$Global:InformationPreference = 'Continue'
-
-if (!(Get-Module -ListAvailable -Name ThreadJob)) {
-	Write-Output "`nInstalling ThreadJob as dependency..."
-	Write-Output "^ This will only happen once!"
-	Set-PSRepository -Name 'PSGallery' -InstallationPolicy Trusted
-	Install-Module -Name ThreadJob -Force
 }
 
 function Get-GamePath {
 	try {
 		$CfgFileContent = Get-Content "$Env:APPDATA\dmmgameplayer5\dmmgame.cnf" -ErrorAction Stop | ConvertFrom-Json
-		$PriconnePath = ($CfgFileContent.contents | Where-Object productId -eq "priconner").detail.path
+		$PriconneContent = $CfgFileContent.contents | Where-Object productId -eq "priconner"
+		$PriconnePath = $PriconneContent.detail.path
 	}
 	catch [System.Management.Automation.ItemNotFoundException] {
 		Write-Error "Cannot find the game path!`nDid you install Priconne from DMM Game?"
@@ -53,8 +47,9 @@ function Get-GamePath {
 
 function Get-LocalVersion {
 	try {
-		$RawVersionFile = Get-Content -Raw -Path "$PriconnePath\BepInEx\Translation\en\Text\Version.txt" -ErrorAction Stop
-		$LocalVersion = $RawVersionFile | Select-String '\d{8}\w?' | Select-Object -ExpandProperty Matches | Select-Object -ExpandProperty Value
+		$RawVersionFile = Get-Content -Raw -Path $VersionFileLocation -ErrorAction Stop
+		$RegexFind = $RawVersionFile | Select-String '\d{8}\w?'
+		$LocalVersion =  $RegexFind.Matches.Value
 		Write-Information "Current Version: $LocalVersion"
 	}
 	catch [System.Management.Automation.ItemNotFoundException] {
@@ -71,8 +66,8 @@ function Get-LocalVersion {
 function Get-LatestRelease {
 	try {
 		$Response = Invoke-RestMethod "$GithubAPI/releases/latest"
-		$Version = $Response | Select-Object -ExpandProperty tag_name
-		$AssetsLink = $Response | Select-Object -ExpandProperty assets | Select-Object -ExpandProperty browser_download_url
+		$Version = $Response.tag_name
+		$AssetLink = $Response.assets.browser_download_url
 	}
 	catch {
 		Write-Error $_.Exception
@@ -80,20 +75,14 @@ function Get-LatestRelease {
 	}
 
 	Write-Information "Latest Version: $Version"
-	return $Version, $AssetsLink
+	return $Version, $AssetLink
 }
 
 function Remove-Mod {
 	param(
 		[switch]$RemoveConfig = $false
 	)
-	
-	$p = Get-Process "PrincessConnectReDive" -ErrorAction SilentlyContinue
 
-	if ($p) {
-		Write-Information "`nScript cannot delete mod files while PriconneR is running.`n"
-		$null = Read-Host -Prompt "Please close Priconne and press Enter to continue"
-	}
 	$UninstallFile = [System.Collections.ArrayList]@(
 		"$PriconnePath\BepInEx\core",
 		"$PriconnePath\BepInEx\plugins",
@@ -102,19 +91,22 @@ function Remove-Mod {
 		"$PriconnePath\.doorstop_version"
 		"$PriconnePath\doorstop_config.ini",
 		"$PriconnePath\winhttp.dll",
-		"$PriconnePath\changelog.txt",
-		"$PriconnePath\Version.txt",
-		"$PriconnePath\ReTL_Updater.lnk"
+		"$PriconnePath\changelog.txt"
 	)
 
 	if ($RemoveConfig) {
-		$null = $UninstallFile.Add("$PriconnePath\BepInEx")
-		$null = $UninstallFile.Add("$PriconnePath\TLUpdater")
-		$null = $UninstallFile.Add("${Env:APPDATA}\BepInEx")
-		Write-Information "`nRemoving TL Mod completely..."
+		$ConfigFile = @(
+			"$PriconnePath\BepInEx",
+			"$PriconnePath\TLUpdater",
+			"$Env:APPDATA\BepInEx"
+		)
+		$UninstallFile.AddRange($ConfigFile) | Out-Null
 	}
-	else {
-		Write-Information "`nRemoving old TL Mod..."
+
+	$p = Get-Process "PrincessConnectReDive" -ErrorAction SilentlyContinue
+	if ($p) {
+		Write-Information "`nScript cannot delete mod files while PriconneR is running.`n"
+		$null = Read-Host -Prompt "Please close Priconne and press Enter to continue"
 	}
 
 	foreach ($file in $UninstallFile) {
@@ -125,31 +117,60 @@ function Remove-Mod {
 	}
 }
 
+function New-FolderIfNotExist {
+	param (
+		[string]$Path
+	)
+
+	$IsFolder = $Path.EndsWith("\") -or $Path.EndsWith("/")
+	if (!$IsFolder) {
+		$Path = Split-Path $Path
+	}
+
+	if (!(Test-Path $Path)) {
+		New-Item -Path $Path -ItemType Directory -Force | Out-Null
+	}
+}
+
+function Expand-ZipEntry {
+	param (
+		[System.IO.FileInfo]$ZipFile,
+		[switch]$ExcludeIni
+	)
+	Add-Type -Assembly System.IO.Compression.FileSystem
+	$zip = [IO.Compression.ZipFile]::OpenRead($ZipFile)
+	$entries = $zip.Entries
+	if ($ExcludeIni) {
+		$entries = $entries | Where-Object {$_.FullName -notmatch ".+AutoTranslatorConfig\.ini$" -or $_.FullName -notmatch ".+BepInEx\.cfg$"}
+	}
+
+	$entries | . { process {
+		$IsFolder = ($_.Name.Length -eq 0) -and ($_.FullName.EndsWith("/") -or $_.FullName.EndsWith("\"))
+		$ExtractPath = $PriconnePath + "\" + $_.FullName
+		if (!$IsFolder) {
+			New-FolderIfNotExist -Path $ExtractPath
+			[IO.Compression.ZipFileExtensions]::ExtractToFile($_, $ExtractPath, $true)
+		}
+	}}
+	$zip.Dispose()
+}
+
 function Get-TLMod {
+	param (
+		[uri]$URI
+	)
+
 	try {
-		Add-Type -Assembly System.IO.Compression.FileSystem
 		Write-Information "`nDownloading compressed mod files..."
-		Write-Verbose "Assets File: $AssetLink`n"
-		Invoke-WebRequest $AssetLink -OutFile ($tempFile = New-TemporaryFile)
+		Invoke-RestMethod -Uri $URI -OutFile ($tempFile = New-TemporaryFile)
 
 		Write-Information "`nExtracting mod files to game folder..."
-		$zip = [IO.Compression.ZipFile]::OpenRead($tempFile)
 		if (Test-Path "$PriconnePath\BepInEx\config\*") {
-			$entries=$zip.Entries | Where-Object {$_.FullName -notmatch ".+\.ini$"}
+			Expand-ZipEntry -ZipFile $tempFile -ExcludeConfig
 		}
 		else {
-			$entries=$zip.Entries
+			Expand-ZipEntry -ZipFile $tempFile
 		}
-		$entries | . { process {
-			if ($_.Name -ne "") {
-				$SplitedPath = "$PriconnePath\$(Split-Path $_.FullName)"
-				if (!(Test-Path "$SplitedPath")) {
-					New-Item -Path $SplitedPath -ItemType Directory
-				}
-				[IO.Compression.ZipFileExtensions]::ExtractToFile( $_, "$PriconnePath\" + $_.FullName, $true)
-			}
-		}} | Out-Null
-		$zip.Dispose()
 
 		Remove-Item -Path $tempFile
 	}
@@ -159,97 +180,106 @@ function Get-TLMod {
 	}
 }
 
-function Update-ChangedFiles {
-	Write-Information "Updating changed files...`n"
+function Get-FileViaTemp {
+	param(
+		[string]$FileName
+	)
 
-	Write-Verbose "Compare URI: $GithubAPI/compare/$LocalVer...$LatestVer"
-	$ChangedFiles = Invoke-RestMethod -URI "$GithubAPI/compare/$LocalVer...$LatestVer" | Select-Object -ExpandProperty files
+	$URI = "https://raw.githubusercontent.com/ImaterialC/PriconneRe-TL/master/src/$FileName"
+	Start-BitsTransfer -Source $URI -Destination ($tempFile = New-TemporaryFile) -Asynchronous -ErrorAction Stop | Out-Null
+	New-FolderIfNotExist "$PriconnePath\$FileName"
+	Move-Item -LiteralPath $tempFile -Destination "$PriconnePath\$FileName" -Force
+}
 
-	$jobs = $ChangedFiles | . { process {
-		$file = $_
-		if ($file.filename -match "^src/.+") {
-			$filename = $file.filename.Replace("src/","")
-			switch ($file.status) {
-				{ $_ -eq "added" -or $_ -eq "modified" } {
-					$Script = {
-						Get-FileViaTemp -FileName $args[0] -GamePath $using:PriconnePath
-						Write-Output "$($args[1]): $($args[0])"
-					}
-					$Arguments = @($filename, $file.status)
-				}
-				"removed" {
-					$Script = {
-						try {
-							Remove-Item -LiteralPath "$using:PriconnePath/$args" -Recurse -ErrorAction Stop
-							Write-Output "removed: $args"
-						}
-						catch [System.Management.Automation.ItemNotFoundException] {
-							Write-Output "not found: $args"
-						}
-					}
-					$Arguments = $filename
-				}
-				"renamed" {
-					$previous_filename = $file.previous_filename.Replace("src/", "")
-					$Script = {
-						try {
-							$NewName = Split-Path $args[0] -Leaf
-							Rename-Item -LiteralPath "$using:PriconnePath/$($args[1])" -NewName $NewName -ErrorAction Stop
-							Write-Output "renamed: $($args[0])"
-						}
-						catch [System.Management.Automation.PSInvalidOperationException] {
-							Write-Verbose "Cannot find the needed file! Download it from repo..."
-							Get-FileViaTemp -FileName $args[0] -GamePath $using:PriconnePath
-							Write-Output "added: $($args[0])"
-						}
-					}
-					$Arguments = @($filename, $previous_filename)
-				}
-			}
-			Start-ThreadJob -InitializationScript $InitScript -ScriptBlock $Script -ArgumentList $Arguments
+function Save-NewVersion {
+	$OldVersionContent = Get-Content $VersionFileLocation
+	$NewVersionContent = $OldVersionContent.Replace("Pre-release", $LatestVer).Replace($LocalVer, $LatestVer)
+	Set-Content -Path $VersionFileLocation -Value $NewVersionContent
+}
+
+function Merge-RepoFiles {
+	param (
+		[string]$Status,
+		[string]$FileName,
+		[string]$PreFileName
+	)
+	switch ($Status) {
+		{ $_ -eq "added" -or $_ -eq "modified" -or $_ -eq "=>"} {
+			Get-FileViaTemp -FileName $FileName
+			Write-Output "added: $FileName"
 		}
-	}}
-
-	if (@($jobs).count -ne 0) {
-		Receive-Job -Job $jobs -AutoRemoveJob -Wait
-		$Version = Get-Content "$PriconnePath\BepInEx\Translation\en\Text\Version.txt"
-		Set-Content -Path "$PriconnePath\BepInEx\Translation\en\Text\Version.txt" -Value $Version.Replace("Pre-release", $LatestVer).Replace($LocalVer, $LatestVer)
-	}
-	else {
-		Write-Information "Nothing changed between two versions!`nFalling back to redownload patch..."
-		Remove-Mod
-		Get-TLMod
+		{ $_ -eq "removed" -or $_ -eq "<="} {
+			try {
+				Remove-Item -LiteralPath "$PriconnePath/$FileName" -Recurse -ErrorAction Stop
+				Write-Output "removed: $FileName"
+			}
+			catch [System.Management.Automation.ItemNotFoundException] {
+				Write-Output "not found: $FileName"
+			}
+		}
+		"renamed" {
+			try {
+				$NewName = Split-Path $FileName -Leaf
+				Rename-Item -LiteralPath "$PriconnePath/$PreFileName" -NewName $NewName -ErrorAction Stop
+				Write-Output "renamed: $PreFileName -> $NewName"
+			}
+			catch [System.Management.Automation.PSInvalidOperationException] {
+				Write-Verbose "Cannot find the needed file! Download it from repo..."
+				Get-FileViaTemp -FileName $FileName
+				Write-Output "added: $FileName"
+			}
+		}
 	}
 }
 
-function Start-DMMFastLauncher {
-	if ($Config.DMMGamePlayerFastLauncherSupport) {
-		$DMMFastLauncher = @(
-			$Config.CustomDMMGPFLPath,
-			"$Env:APPDATA\DMMGamePlayerFastLauncher",
-			$PriconnePath
-		)
-	
-		foreach ($path in $DMMFastLauncher) {
-			Write-Verbose "Checking $path\DMMGamePlayerFastLauncher.exe"
-			if (Test-Path -Path "$path\DMMGamePlayerFastLauncher.exe" -PathType Leaf -ErrorAction SilentlyContinue) {
-				Write-Verbose "Found DMMGamePlayerFastLauncher in $path!"
-				Write-Information "Starting PriconneR game..."
-				Start-Process -FilePath "$path\DMMGamePlayerFastLauncher.exe" -WorkingDirectory "$path" -ArgumentList "priconner"
-				return
-			}
-			Write-Verbose "Not Exist!"
+function Update-ChangedFiles {
+	Write-Information "Updating changed files...`n"
+
+	$URI = "$GithubAPI/compare/$LocalVer...$LatestVer"
+	Write-Verbose "Compare URI: $URI"
+	$ChangedFiles = (Invoke-RestMethod -URI $URI).files
+
+	if ($ChangedFiles.Count -eq 0) {
+		return $false
+	}
+
+	$ChangedFiles | . { process {
+		if ($_.previous_filename) {
+			$PreviousFilename = $_.previous_filename.Replace("src/", "")
 		}
+		$FileName = $_.filename.Replace("src/", "")
+		Merge-RepoFiles -Status $_.status -FileName $FileName -PreFileName $PreviousFilename
+	}}
+
+	Get-BitsTransfer | Complete-BitsTransfer
+	Save-NewVersion
+}
+
+function Start-DMMFastLauncher {
+	$DMMFastLauncher = @(
+		$Config.CustomDMMGPFLPath,
+		"$Env:APPDATA\DMMGamePlayerFastLauncher",
+		$PriconnePath
+	)
+
+	foreach ($path in $DMMFastLauncher) {
+		Write-Verbose "Checking $path\DMMGamePlayerFastLauncher.exe"
+		if (Test-Path -Path "$path\DMMGamePlayerFastLauncher.exe" -PathType Leaf) {
+			Write-Verbose "Found DMMGamePlayerFastLauncher in $path!"
+			Write-Information "Starting PriconneR game..."
+			Start-Process -FilePath "$path\DMMGamePlayerFastLauncher.exe" -WorkingDirectory "$path" -ArgumentList "priconner"
+			return
+		}
+		Write-Verbose "Not Exist!"
 	}
 }
 
 function Import-UserConfig {
 	$Config = @{
-		"DMMGamePlayerFastLauncherSupport" = $true;
-		"CustomDMMGPFLPath"                = "";
-		"ForceRedownloadWhenUpdate"        = $false;
-		"Uninstall"                        = $false;
-		"VerifyFilesAfterUpdate"           = $true;
+		"DMMGamePlayerFastLauncherSupport" = $true
+		"CustomDMMGPFLPath"                = ""
+		"ForceRedownloadWhenUpdate"        = $false
+		"VerifyFilesAfterUpdate"           = $true
 		"VerifyIgnoreFiles"                = @(
 			"Translation/en/Text/_AutoGeneratedTranslations.txt",
 			"Translation/en/Text/_Postprocessors.txt",
@@ -257,23 +287,26 @@ function Import-UserConfig {
 		)
 	}
 
-	$UserConfig = Get-Content $UserCfgLocation -ErrorAction SilentlyContinue | ConvertFrom-Json
+	$ConfigFileExist = Test-Path "$PriconnePath\TLUpdater\config.json"
+	if (!$ConfigFileExist) {
+		New-FolderIfNotExist -Path $UserCfgLocation
+		$Config | ConvertTo-Json | Out-File $UserCfgLocation -Force
+		return $Config
+	}
+
+	$UserConfig = Get-Content $UserCfgLocation | ConvertFrom-Json
 	$Names = $UserConfig.PSOBject.Properties.Name
 
 	foreach ($name in $Names) {
-		Write-Verbose "Import Config: $name = $($UserConfig.$name)"
+		Write-Verbose "Imported Config: $name = $($UserConfig.$name)"
 		$Config.$name = $UserConfig.$name
 	}
 
-	Write-Verbose "Config: $Config"
 	return $Config
 }
 
-function Compare-TLFiles {
-	Write-Information "Verifying..."
-
-	$SHA = Invoke-RestMethod -URI "$GithubAPI/git/ref/tags/$LatestVer" | Select-Object -ExpandProperty object | Select-Object -ExpandProperty sha
-	$LocalPaths = @(
+function Get-LocalFileList {
+	$LocalPaths = Get-ChildItem -Recurse -File -Path @(
 		"$PriconnePath\BepInEx\Translation",
 		"$PriconnePath\BepInEx\config\AutoTranslatorConfig.ini",
 		"$PriconnePath\BepInEx\core",
@@ -288,105 +321,106 @@ function Compare-TLFiles {
 		"$PriconnePath\winhttp.dll"
 	)
 
-	$LocalFiles = (Get-ChildItem -Path $LocalPaths -Recurse -File) | . { process {
+	$LocalFiles = $LocalPaths | . { process {
 		$Path = $_.FullName.Replace("$PriconnePath\", "").Replace("\", "/")
 		if ($Path -notin $Config.VerifyIgnoreFiles) {
 			$Path
 		}
 	}}
+	
+	return $LocalFiles
+}
 
-	$RemoteFiles = (Invoke-RestMethod "$GithubAPI/git/trees/${SHA}?recursive=0").tree | . { process {
+function Get-GithubFileList {
+	$SHA = (Invoke-RestMethod -URI "$GithubAPI/git/ref/tags/$LatestVer").object.sha
+	$RemotePaths = (Invoke-RestMethod "$GithubAPI/git/trees/${SHA}?recursive=0").tree
+
+	$RemoteFiles = $RemotePaths | . { process {
 		if (($_.path -match "^src/.+") -and ($_.type -eq "blob") -and ($_.path -notin $Config.VerifyIgnoreFiles)) {
 			$_.path.Replace("src/","")
 		}
 	}}
 
-	$jobs = Compare-Object -ReferenceObject $LocalFiles -DifferenceObject $RemoteFiles | . { process {
-		switch ($_.SideIndicator) {
-			"<=" {
-				$Script = {
-					Remove-Item -LiteralPath "$using:PriconnePath\$args"
-					Write-Output "removed: $args"
-				}
-			}
-			"=>" {
-				$Script = {
-					Get-FileViaTemp -FileName $args -GamePath $using:PriconnePath
-					Write-Output "added: $args"
-				}
-			}
-		}
-		Start-ThreadJob -InitializationScript $InitScript -ScriptBlock $Script -ArgumentList $_.InputObject
+	return $RemoteFiles
+}
+
+function Compare-TLFiles {
+	Write-Information "Verifying..."
+
+	$LocalFiles = Get-LocalFileList
+	$RemoteFiles = Get-GithubFileList
+
+	$CompareResult = Compare-Object -ReferenceObject $LocalFiles -DifferenceObject $RemoteFiles
+	if ($CompareResult.Count -eq 0) {
+		return
+	}
+
+	$CompareResult | . { process {
+		Merge-RepoFiles -Status $_.SideIndicator -FileName $_.InputObject
 	}}
-	if (@($jobs).count -ne 0) {
-		Receive-Job -Job $jobs -AutoRemoveJob -Wait
+	Get-BitsTransfer | Complete-BitsTransfer
+}
+
+function Start-CheckForUpdate {
+	Write-Output "`nChecking for update..."
+	$LocalVer = Get-LocalVersion
+	$LatestVer, $AssetLink = Get-LatestRelease
+
+	if ($ForceRedownload) {
+		Remove-Mod
+		Get-TLMod -URI $AssetLink
+		return
+	}
+
+	if ($LocalVer -eq "None") {
+		Write-Output "`nDownloading and installing TL Mod..."
+		Get-TLMod -URI $AssetLink
+	}
+	elseif ($LocalVer -ne $LatestVer) {
+		if ($Config.ForceRedownloadWhenUpdate) {
+			Get-TLMod -URI $AssetLink
+			return
+		}
+
+		if (!(Update-ChangedFiles)) {
+			Write-Information "Nothing changed between two versions!`nFalling back to redownload patch..."
+			Remove-Mod
+			Get-TLMod -URI $AssetLink
+		}
+
+		if ($Config.VerifyFilesAfterUpdate) {
+			Compare-TLFiles
+		}
+	}
+ 	else {
+		Write-Output "`nYour PriconeTL version is latest!"
 	}
 }
 
-New-Item -ItemType Directory -Path "$Env:TEMP\TLUpdaterLogs" -ErrorAction SilentlyContinue
 $LogFile = "$Env:TEMP\TLUpdater-Logs\$(Get-Date -Format 'yyyy-MM-dd_HH-mm-ss').log"
+New-FolderIfNotExist -Path $LogFile
 Start-Transcript -Path $LogFile | Out-Null
 
 $GithubAPI = "https://api.github.com/repos/ImaterialC/PriconneRe-TL"
 $PriconnePath = Get-GamePath
 $UserCfgLocation = "$PriconnePath\TLUpdater\config.json"
+$VersionFileLocation = "$PriconnePath\BepInEx\Translation\en\Text\Version.txt"
 $Config = Import-UserConfig
 
-if ($Uninstall -or $Config.Uninstall) {
+if ($Uninstall) {
 	Remove-Mod -RemoveConfig
+	Stop-Transcript
+	return
+}
+if ($Verify) {
+	Compare-TLFiles
 }
 else {
-	Write-Output "`nChecking for update..."
-	$LocalVer = Get-LocalVersion
-	$LatestVer, $AssetLink = Get-LatestRelease
+	Start-CheckForUpdate
+}
 
-	if ($LocalVer -ge $LatestVer -and $LocalVer -ne "None" -and !$ForceRedownload -and !$Verify) {
-		Write-Output "`nYour PriconeTL version is latest!"
-	}
-	elseif ($LocalVer -le $LatestVer -or $Verify) {
-		if (!$Config.ForceRedownloadWhenUpdate -and !$ForceRedownload) {
-			$InitScript = {
-				function Get-FileViaTemp {
-					param(
-						[string]$FileName
-						,
-						[string]$GamePath
-					)
-		
-					$SplitedPath = Split-Path "$GamePath\$FileName"
-					$URI = "https://raw.githubusercontent.com/ImaterialC/PriconneRe-TL/master/src/$FileName"
-					# Write-Output "URI: $URI"
-		
-					Invoke-RestMethod -URI $URI -OutFile ($tempFile = New-TemporaryFile)
-					if (!(Test-Path $SplitedPath -PathType Container)) {
-						New-Item $SplitedPath -ItemType Directory -Force | Out-Null
-					}
-					Move-Item -LiteralPath $tempFile -Destination "$GamePath\$FileName" -Force
-				}
-			}
-			if (!$Verify) {
-				Update-ChangedFiles
-			}
-			if ($Config.VerifyFilesAfterUpdate -or $Verify) {
-				Compare-TLFiles
-			}
-		}
-		else {
-			Remove-Mod
-			Get-TLMod
-		}
-		Write-Output "`nDone!"
-	}
-	else {
-		Write-Output "`nDownloading and installing TL Mod..."
-		Get-TLMod
-		Write-Output "`nDone!"
-	}
-
-	New-Item -Path "$PriconnePath\TLUpdater" -ItemType Directory -ErrorAction SilentlyContinue | Out-Null
-	$Config | ConvertTo-Json | Out-File $UserCfgLocation -Force
+if ($Config.DMMGamePlayerFastLauncherSupport) {
 	Start-DMMFastLauncher
 }
 
-Write-Output ""
 Stop-Transcript
