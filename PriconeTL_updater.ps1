@@ -68,13 +68,13 @@ function Get-LatestRelease {
 		$Response = Invoke-RestMethod "$GithubAPI/releases/latest"
 		$Version = $Response.tag_name
 		$AssetLink = $Response.assets.browser_download_url
+		Write-Information "Latest Version: $Version"
 	}
 	catch {
 		Write-Error $_.Exception
 		exit
 	}
 
-	Write-Information "Latest Version: $Version"
 	return $Version, $AssetLink
 }
 
@@ -180,21 +180,21 @@ function Get-TLMod {
 	}
 }
 
-function Get-FileViaTemp {
-	param(
-		[string]$FileName
-	)
-
-	$URI = "https://raw.githubusercontent.com/ImaterialC/PriconneRe-TL/master/src/$FileName"
-	Start-BitsTransfer -Source $URI -Destination ($tempFile = New-TemporaryFile) -Asynchronous -ErrorAction Stop | Out-Null
-	New-FolderIfNotExist "$PriconnePath\$FileName"
-	Move-Item -LiteralPath $tempFile -Destination "$PriconnePath\$FileName" -Force
-}
-
 function Save-NewVersion {
 	$OldVersionContent = Get-Content $VersionFileLocation
 	$NewVersionContent = $OldVersionContent.Replace("Pre-release", $LatestVer).Replace($LocalVer, $LatestVer)
 	Set-Content -Path $VersionFileLocation -Value $NewVersionContent
+}
+
+function Get-FileFromRepo {
+	param (
+		[string]$FileName
+	)
+	$URI = "https://raw.githubusercontent.com/ImaterialC/PriconneRe-TL/master/src/$FileName"
+	$Destination = "$PriconnePath/$FileName"
+
+	New-FolderIfNotExist $Destination
+	Start-BitsTransfer -Source $URI -Destination $Destination -Asynchronous -ErrorAction Stop | Out-Null
 }
 
 function Merge-RepoFiles {
@@ -203,30 +203,31 @@ function Merge-RepoFiles {
 		[string]$FileName,
 		[string]$PreFileName
 	)
+	Write-Verbose "Status: $Status, FileName: $FileName, PreFileName: $PreFileName"
 	switch ($Status) {
 		{ $_ -eq "added" -or $_ -eq "modified" -or $_ -eq "=>"} {
-			Get-FileViaTemp -FileName $FileName
-			Write-Output "added: $FileName"
+			Get-FileFromRepo -FileName $FileName 
+			Write-Information "added: $FileName"
 		}
 		{ $_ -eq "removed" -or $_ -eq "<="} {
 			try {
 				Remove-Item -LiteralPath "$PriconnePath/$FileName" -Recurse -ErrorAction Stop
-				Write-Output "removed: $FileName"
+				Write-Information "removed: $FileName"
 			}
 			catch [System.Management.Automation.ItemNotFoundException] {
-				Write-Output "not found: $FileName"
+				Write-Information "not found: $FileName"
 			}
 		}
 		"renamed" {
 			try {
 				$NewName = Split-Path $FileName -Leaf
 				Rename-Item -LiteralPath "$PriconnePath/$PreFileName" -NewName $NewName -ErrorAction Stop
-				Write-Output "renamed: $PreFileName -> $NewName"
+				Write-Information "renamed: $PreFileName -> $NewName"
 			}
 			catch [System.Management.Automation.PSInvalidOperationException] {
 				Write-Verbose "Cannot find the needed file! Download it from repo..."
-				Get-FileViaTemp -FileName $FileName
-				Write-Output "added: $FileName"
+				Get-FileFromRepo -FileName $FileName 
+				Write-Information "added: $FileName"
 			}
 		}
 	}
@@ -253,6 +254,8 @@ function Update-ChangedFiles {
 
 	Get-BitsTransfer | Complete-BitsTransfer
 	Save-NewVersion
+
+	return $true
 }
 
 function Start-DMMFastLauncher {
@@ -363,8 +366,6 @@ function Compare-TLFiles {
 
 function Start-CheckForUpdate {
 	Write-Output "`nChecking for update..."
-	$LocalVer = Get-LocalVersion
-	$LatestVer, $AssetLink = Get-LatestRelease
 
 	if ($ForceRedownload) {
 		Remove-Mod
@@ -416,6 +417,8 @@ if ($Verify) {
 	Compare-TLFiles
 }
 else {
+	$LocalVer = Get-LocalVersion
+	$LatestVer, $AssetLink = Get-LatestRelease
 	Start-CheckForUpdate
 }
 
