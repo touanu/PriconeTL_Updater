@@ -365,36 +365,36 @@ function Compare-TLFiles {
 }
 
 function Start-CheckForUpdate {
-	Write-Output "`nChecking for update..."
+	$LocalVer = Get-LocalVersion
+	$LatestVer, $AssetLink = Get-LatestRelease
 
 	if ($ForceRedownload) {
 		Remove-Mod
 		Get-TLMod -URI $AssetLink
 		return
 	}
-
+	Write-Information "`nChecking for update..."
 	if ($LocalVer -eq "None") {
 		Write-Output "`nDownloading and installing TL Mod..."
 		Get-TLMod -URI $AssetLink
+		return
 	}
-	elseif ($LocalVer -ne $LatestVer) {
-		if ($Config.ForceRedownloadWhenUpdate) {
-			Get-TLMod -URI $AssetLink
-			return
-		}
-
-		if (!(Update-ChangedFiles)) {
-			Write-Information "Nothing changed between two versions!`nFalling back to redownload patch..."
-			Remove-Mod
-			Get-TLMod -URI $AssetLink
-		}
-
-		if ($Config.VerifyFilesAfterUpdate) {
-			Compare-TLFiles
-		}
+	if ($LocalVer -eq $LatestVer) {
+		Write-Information "`nYour PriconeTL version is latest!"
+		return
 	}
- 	else {
-		Write-Output "`nYour PriconeTL version is latest!"
+	if ($Config.ForceRedownloadWhenUpdate) {
+		Get-TLMod -URI $AssetLink
+		return
+	}
+
+	if (!(Update-ChangedFiles)) {
+		Write-Information "Nothing changed between two versions!`nFalling back to redownload patch..."
+		Remove-Mod
+		Get-TLMod -URI $AssetLink
+	}
+	if ($Config.VerifyFilesAfterUpdate) {
+		Compare-TLFiles
 	}
 }
 
@@ -417,8 +417,6 @@ if ($Verify) {
 	Compare-TLFiles
 }
 else {
-	$LocalVer = Get-LocalVersion
-	$LatestVer, $AssetLink = Get-LatestRelease
 	Start-CheckForUpdate
 }
 
