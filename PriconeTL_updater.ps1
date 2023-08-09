@@ -12,7 +12,7 @@ param (
 $Global:ProgressPreference = 'SilentlyContinue'
 $Global:InformationPreference = 'Continue'
 If (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
-	Write-Output "Requesting admin privilege..."
+	Write-Information "Requesting admin privilege..."
 	$arguments = "-U:`$$Uninstall -FR:`$$ForceRedownload -V:`$$Verify"
 	if ($PSCommandPath) {
 		Write-Verbose "Using local script"
@@ -112,7 +112,7 @@ function Remove-Mod {
 	foreach ($file in $UninstallFile) {
 		if (Test-Path "$file" -PathType Any) {
 			Remove-Item -Path "$file" -Recurse -Force
-			Write-Output "Removing $file"
+			Write-Information "Removing $file"
 		}
 	}
 }
@@ -193,7 +193,7 @@ function Get-FileFromRepo {
 	$URI = "https://raw.githubusercontent.com/ImaterialC/PriconneRe-TL/master/src/$FileName"
 	$Destination = "$PriconnePath/$FileName"
 
-	New-FolderIfNotExist $Destination
+	New-FolderIfNotExist -Path $Destination
 	Start-BitsTransfer -Source $URI -Destination $Destination -Asynchronous -ErrorAction Stop | Out-Null
 }
 
@@ -204,31 +204,33 @@ function Merge-RepoFiles {
 		[string]$PreFileName
 	)
 	Write-Verbose "Status: $Status, FileName: $FileName, PreFileName: $PreFileName"
+	$DestinationPath = $PriconnePath + "\" + $FileName.Replace("/","\")
+
 	switch ($Status) {
 		{ $_ -eq "added" -or $_ -eq "modified" -or $_ -eq "=>"} {
-			Get-FileFromRepo -FileName $FileName 
+			Get-FileFromRepo -FileName $FileName
 			Write-Information "added: $FileName"
 		}
 		{ $_ -eq "removed" -or $_ -eq "<="} {
-			try {
-				Remove-Item -LiteralPath "$PriconnePath/$FileName" -Recurse -ErrorAction Stop
-				Write-Information "removed: $FileName"
-			}
-			catch [System.Management.Automation.ItemNotFoundException] {
+			if (!(Test-Path -LiteralPath $DestinationPath)) {
 				Write-Information "not found: $FileName"
+				return
 			}
+
+			Remove-Item -LiteralPath $DestinationPath -Recurse -ErrorAction Stop
+			Write-Information "removed: $FileName"
 		}
 		"renamed" {
-			try {
-				$NewName = Split-Path $FileName -Leaf
-				Rename-Item -LiteralPath "$PriconnePath/$PreFileName" -NewName $NewName -ErrorAction Stop
-				Write-Information "renamed: $PreFileName -> $NewName"
-			}
-			catch [System.Management.Automation.PSInvalidOperationException] {
+			$PreviousPath = Join-Path -Path $PriconnePath -ChildPath $PreFileName
+			if (!(Test-Path $PreviousPath)) {
 				Write-Verbose "Cannot find the needed file! Download it from repo..."
-				Get-FileFromRepo -FileName $FileName 
+				Get-FileFromRepo -FileName $FileName
 				Write-Information "added: $FileName"
 			}
+
+			New-FolderIfNotExist -Path $DestinationPath
+			Move-Item -Path $PreviousPath -Destination $DestinationPath
+			Write-Information "renamed: $PreFileName -> $FileName"
 		}
 	}
 }
@@ -377,7 +379,7 @@ function Start-CheckForUpdate {
 	}
 	Write-Information "`nChecking for update..."
 	if ($LocalVer -eq "None") {
-		Write-Output "`nDownloading and installing TL Mod..."
+		Write-Information "`nDownloading and installing TL Mod..."
 		Get-TLMod -URI $AssetLink
 		return
 	}
