@@ -11,6 +11,7 @@ param (
 
 $Global:ProgressPreference = 'SilentlyContinue'
 $Global:InformationPreference = 'Continue'
+
 If (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
 	Write-Information "Requesting admin privilege..."
 	$arguments = "-U:`$$Uninstall -FR:`$$ForceRedownload -V:`$$Verify"
@@ -49,7 +50,7 @@ function Get-LocalVersion {
 	try {
 		$RawVersionFile = Get-Content -Raw -Path $VersionFileLocation -ErrorAction Stop
 		$RegexFind = $RawVersionFile | Select-String '\d{8}\w?'
-		$LocalVersion =  $RegexFind.Matches.Value
+		$LocalVersion = $RegexFind.Matches.Value
 		Write-Information "Current Version: $LocalVersion"
 	}
 	catch [System.Management.Automation.ItemNotFoundException] {
@@ -261,6 +262,7 @@ function Update-ChangedFiles {
 }
 
 function Start-DMMFastLauncher {
+	$FileName = $Config.DMMGPFLShortcutFileName
 	$DMMFastLauncher = @(
 		$Config.CustomDMMGPFLPath,
 		"$Env:APPDATA\DMMGamePlayerFastLauncher",
@@ -269,19 +271,24 @@ function Start-DMMFastLauncher {
 
 	foreach ($path in $DMMFastLauncher) {
 		Write-Verbose "Checking $path\DMMGamePlayerFastLauncher.exe"
-		if (Test-Path -Path "$path\DMMGamePlayerFastLauncher.exe" -PathType Leaf) {
-			Write-Verbose "Found DMMGamePlayerFastLauncher in $path!"
-			Write-Information "Starting PriconneR game..."
-			Start-Process -FilePath "$path\DMMGamePlayerFastLauncher.exe" -WorkingDirectory "$path" -ArgumentList "priconner"
-			return
+		$IsDMMGPFLExist = Test-Path -Path "$path\DMMGamePlayerFastLauncher.exe" -PathType Leaf
+
+		if (!$IsDMMGPFLExist) {
+			Write-Verbose "Not Exist!"
+			continue
 		}
-		Write-Verbose "Not Exist!"
+
+		Write-Verbose "Found DMMGamePlayerFastLauncher in $path!"
+		Write-Information "Starting PriconneR game..."
+		Start-Process -FilePath "$path\DMMGamePlayerFastLauncher.exe" -WorkingDirectory "$path" -ArgumentList "$FileName --type game" -Verb RunAs
+		return
 	}
 }
 
 function Import-UserConfig {
 	$Config = @{
-		"DMMGamePlayerFastLauncherSupport" = $true
+		"DMMGamePlayerFastLauncherSupport" = $false
+		"DMMGPFLShortcutFileName" 	       = "priconner"
 		"CustomDMMGPFLPath"                = ""
 		"ForceRedownloadWhenUpdate"        = $false
 		"VerifyFilesAfterUpdate"           = $true
@@ -295,18 +302,18 @@ function Import-UserConfig {
 	$ConfigFileExist = Test-Path $UserCfgLocation
 	if (!$ConfigFileExist) {
 		New-FolderIfNotExist -Path $UserCfgLocation
-		$Config | ConvertTo-Json | Out-File $UserCfgLocation -Force
-		return $Config
+	}
+	else {
+		$UserConfig = Get-Content $UserCfgLocation | ConvertFrom-Json
+		$Names = $UserConfig.PSOBject.Properties.Name
+
+		foreach ($name in $Names) {
+			Write-Verbose "Imported Config: $name = $($UserConfig.$name)"
+			$Config.$name = $UserConfig.$name
+		}
 	}
 
-	$UserConfig = Get-Content $UserCfgLocation | ConvertFrom-Json
-	$Names = $UserConfig.PSOBject.Properties.Name
-
-	foreach ($name in $Names) {
-		Write-Verbose "Imported Config: $name = $($UserConfig.$name)"
-		$Config.$name = $UserConfig.$name
-	}
-
+	$Config | ConvertTo-Json | Out-File $UserCfgLocation -Force
 	return $Config
 }
 
