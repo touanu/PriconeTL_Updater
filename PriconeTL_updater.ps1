@@ -28,38 +28,28 @@ If (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]:
 }
 
 function Get-GamePath {
-	try {
-		$CfgFileContent = Get-Content "$Env:APPDATA\dmmgameplayer5\dmmgame.cnf" -ErrorAction Stop | ConvertFrom-Json
-		$PriconneContent = $CfgFileContent.contents | Where-Object productId -eq "priconner"
-		$PriconnePath = $PriconneContent.detail.path
-	}
-	catch [System.Management.Automation.ItemNotFoundException] {
+	$CfgFileContent = Get-Content "$Env:APPDATA\dmmgameplayer5\dmmgame.cnf" -ErrorAction SilentlyContinue | ConvertFrom-Json
+	if (!$CfgFileContent) {
 		Write-Error "Cannot find the game path!`nDid you install Priconne from DMM Game?"
-		exit
 	}
-	catch {
-		Write-Error $_.Exception
-		exit
-	}
+
+	$PriconneContent = $CfgFileContent.contents | Where-Object productId -eq "priconner"
+	$PriconnePath = $PriconneContent.detail.path
 
 	Write-Information "Found priconner in $PriconnePath"
 	return $PriconnePath
 }
 
 function Get-LocalVersion {
-	try {
-		$RawVersionFile = Get-Content -Raw -Path $VersionFileLocation -ErrorAction Stop
-		$RegexFind = $RawVersionFile | Select-String '\d{8}\w?'
-		$LocalVersion = $RegexFind.Matches.Value
-		Write-Information "Current Version: $LocalVersion"
+	$RawVersionFile = Get-Content -Raw -Path $VersionFileLocation -ErrorAction SilentlyContinue
+
+	if (!$RawVersionFile) {
+		return "None"
 	}
-	catch [System.Management.Automation.ItemNotFoundException] {
-		$LocalVersion = "None"
-	}
-	catch {
-		Write-Error $_.Exception
-		exit
-	}
+
+	$RegexFind = $RawVersionFile | Select-String '\d{8}\w?'
+	$LocalVersion = $RegexFind.Matches.Value
+	Write-Information "Current Version: $LocalVersion"
 
 	return $LocalVersion
 }
