@@ -233,7 +233,7 @@ function Update-ChangedFiles {
 	Write-Verbose "Compare URI: $URI"
 	$ChangedFiles = (Invoke-RestMethod -URI $URI).files
 
-	if ($ChangedFiles.Count -eq 0) {
+	if ($ChangedFiles.Count -eq 0 -or $ChangedFiles.Count -ge 299) {
 		return $false
 	}
 
@@ -390,7 +390,7 @@ function Start-CheckForUpdate {
 	}
 
 	if (!(Update-ChangedFiles)) {
-		Write-Information "Nothing changed between two versions!`nFalling back to redownload patch..."
+		Write-Information "Redownloading patch..."
 		Remove-Mod
 		Get-TLMod -URI $AssetLink
 	}
