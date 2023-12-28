@@ -251,12 +251,34 @@ function Update-ChangedFiles {
 	return $true
 }
 
+function Find-DMMFastLauncherFileName {
+	param (
+		[string]$Path
+	)
+
+	if ($Config.DMMGPFLShortcutFileName) {
+		return $Config.DMMGPFLShortcutFileName
+	}
+
+	$ShortcutPath = "$Path\data\shortcut"
+	Write-Verbose "DMMFL Data path: $ShortcutPath"
+	Get-ChildItem $ShortcutPath | ForEach-Object {
+		$Shortcut = Get-Content $_.FullName | ConvertFrom-Json
+		$IsPriconnerShortcut = $Shortcut.product_id -eq "priconner"
+
+		if (!$IsPriconnerShortcut) {
+			continue
+		}
+
+		$PriconnerShortcut = (Split-Path $_.FullName -Leaf).Replace(".json","")
+		return $PriconnerShortcut
+	}
+}
+
 function Start-DMMFastLauncher {
-	$FileName = $Config.DMMGPFLShortcutFileName
 	$DMMFastLauncher = @(
 		$Config.CustomDMMGPFLPath,
-		"$Env:APPDATA\DMMGamePlayerFastLauncher",
-		$PriconnePath
+		"$Env:APPDATA\DMMGamePlayerFastLauncher"
 	)
 
 	foreach ($path in $DMMFastLauncher) {
@@ -269,6 +291,13 @@ function Start-DMMFastLauncher {
 		}
 
 		Write-Verbose "Found DMMGamePlayerFastLauncher in $path!"
+		$FileName = Find-DMMFastLauncherFileName $path
+
+		if (!$FileName) {
+			Write-Error "Priconner shortcut doesn't exist!`nOpen DMMGamePlayerFastLauncher to create a new shortcut"
+			return
+		}
+
 		Write-Information "Starting PriconneR game..."
 		Start-Process -FilePath "$path\DMMGamePlayerFastLauncher.exe" -WorkingDirectory "$path" -ArgumentList "$FileName --type game" -Verb RunAs
 		return
@@ -277,8 +306,8 @@ function Start-DMMFastLauncher {
 
 function Import-UserConfig {
 	$Config = @{
-		"DMMGamePlayerFastLauncherSupport" = $false
-		"DMMGPFLShortcutFileName" 	       = "priconner"
+		"DMMGamePlayerFastLauncherSupport" = $true
+		"DMMGPFLShortcutFileName" 	       = ""
 		"CustomDMMGPFLPath"                = ""
 		"ForceRedownloadWhenUpdate"        = $false
 		"VerifyFilesAfterUpdate"           = $true
